@@ -39,14 +39,9 @@ def preprocess_house_prices_data(data_dir: str = "./data") -> tuple:
     test_path = dir_path / "test.csv"
 
     if not train_path.exists():
-        alt_path = Path(
-            "/Users/out/.gemini/antigravity/scratch/house-prices-kaggle/data/train.csv"
-        )
-        if alt_path.exists():
-            train_path = alt_path
-            test_path = Path(
-                "/Users/out/.gemini/antigravity/scratch/house-prices-kaggle/data/test.csv"
-            )
+        raise FileNotFoundError(f"Training data not found at {train_path}")
+    if not test_path.exists():
+        raise FileNotFoundError(f"Test data not found at {test_path}")
 
     train = pd.read_csv(train_path)
     test = pd.read_csv(test_path)

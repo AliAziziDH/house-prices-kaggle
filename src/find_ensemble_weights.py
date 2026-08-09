@@ -14,6 +14,7 @@ import pandas as pd
 from catboost import CatBoostRegressor
 from scipy.optimize import minimize, minimize_scalar
 from sklearn.linear_model import ElasticNetCV, LassoCV, Ridge
+from sklearn.base import clone
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import KFold
 from sklearn.pipeline import make_pipeline
@@ -159,6 +160,51 @@ alphas_lasso = np.logspace(-5, 1, 100)
 alphas_elasticnet = np.logspace(-5, 1, 100)
 l1_ratios = [0.1, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
 
+# Define base models outside the loop
+cat_params = best_params_cat.copy()
+cat_params.update(
+    {
+        "iterations": 2000,
+        "random_seed": RANDOM_STATE,
+        "verbose": False,
+        "early_stopping_rounds": 50,
+    }
+)
+base_model_cat = CatBoostRegressor(**cat_params)
+
+xgb_params = best_params_xgb.copy()
+xgb_params.update(
+    {
+        "n_estimators": 2000,
+        "random_state": RANDOM_STATE,
+        "verbosity": 0,
+        "early_stopping_rounds": 50,
+    }
+)
+base_model_xgb = XGBRegressor(**xgb_params)
+
+lgb_params = best_params_lgb.copy()
+lgb_params.update({"n_estimators": 2000, "random_state": RANDOM_STATE, "verbosity": -1})
+base_model_lgb = lgb.LGBMRegressor(**lgb_params)
+
+base_model_ridge = Ridge(alpha=15.0, random_state=RANDOM_STATE)
+
+base_model_lasso = make_pipeline(
+    RobustScaler(),
+    LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=10000),
+)
+
+base_model_elasticnet = make_pipeline(
+    RobustScaler(),
+    ElasticNetCV(
+        alphas=alphas_elasticnet,
+        l1_ratio=l1_ratios,
+        cv=5,
+        random_state=RANDOM_STATE,
+        max_iter=10000,
+    ),
+)
+
 # Get the raw, unencoded Neighborhood string labels for the test set
 raw_test_neighborhoods = X_test_raw["Neighborhood"]
 
@@ -226,16 +272,7 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
     X_te_sc_fold = fold_scaler.transform(X_te_fold)
 
     # 1. CatBoost
-    cat_params = best_params_cat.copy()
-    cat_params.update(
-        {
-            "iterations": 2000,
-            "random_seed": RANDOM_STATE,
-            "verbose": False,
-            "early_stopping_rounds": 50,
-        }
-    )
-    model_cat = CatBoostRegressor(**cat_params)
+    model_cat = clone(base_model_cat)
     model_cat.fit(
         X_tr_raw,
         y_tr,
@@ -247,26 +284,13 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
     test_preds_cat += model_cat.predict(X_te_raw_fold) / N_FOLDS
 
     # 2. XGBoost
-    xgb_params = best_params_xgb.copy()
-    xgb_params.update(
-        {
-            "n_estimators": 2000,
-            "random_state": RANDOM_STATE,
-            "verbosity": 0,
-            "early_stopping_rounds": 50,
-        }
-    )
-    model_xgb = XGBRegressor(**xgb_params)
+    model_xgb = clone(base_model_xgb)
     model_xgb.fit(X_tr, y_tr, eval_set=[(X_va, y_va)], verbose=False)
     oof_xgb[val_idx] = model_xgb.predict(X_va)
     test_preds_xgb += model_xgb.predict(X_te_fold) / N_FOLDS
 
     # 3. LightGBM
-    lgb_params = best_params_lgb.copy()
-    lgb_params.update(
-        {"n_estimators": 2000, "random_state": RANDOM_STATE, "verbosity": -1}
-    )
-    model_lgb = lgb.LGBMRegressor(**lgb_params)
+    model_lgb = clone(base_model_lgb)
     model_lgb.fit(
         X_tr,
         y_tr,
@@ -277,31 +301,19 @@ for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
     test_preds_lgb += model_lgb.predict(X_te_fold) / N_FOLDS
 
     # 4. Ridge Regression (scaled cleanly inside fold)
-    model_ridge = Ridge(alpha=15.0, random_state=RANDOM_STATE)
+    model_ridge = clone(base_model_ridge)
     model_ridge.fit(X_tr_sc, y_tr)
     oof_ridge[val_idx] = model_ridge.predict(X_va_sc)
     test_preds_ridge += model_ridge.predict(X_te_sc_fold) / N_FOLDS
 
     # 5. Lasso Regression (with RobustScaler inside fold)
-    model_lasso = make_pipeline(
-        RobustScaler(),
-        LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=10000),
-    )
+    model_lasso = clone(base_model_lasso)
     model_lasso.fit(X_tr, y_tr)
     oof_lasso[val_idx] = model_lasso.predict(X_va)
     test_preds_lasso += model_lasso.predict(X_te_fold) / N_FOLDS
 
     # 6. ElasticNet Regression (with RobustScaler inside fold)
-    model_elasticnet = make_pipeline(
-        RobustScaler(),
-        ElasticNetCV(
-            alphas=alphas_elasticnet,
-            l1_ratio=l1_ratios,
-            cv=5,
-            random_state=RANDOM_STATE,
-            max_iter=10000,
-        ),
-    )
+    model_elasticnet = clone(base_model_elasticnet)
     model_elasticnet.fit(X_tr, y_tr)
     oof_elasticnet[val_idx] = model_elasticnet.predict(X_va)
     test_preds_elasticnet += model_elasticnet.predict(X_te_fold) / N_FOLDS
