@@ -38,10 +38,10 @@ def preprocess_house_prices_data(data_dir: str = "./data") -> tuple:
     train_path = dir_path / "train.csv"
     test_path = dir_path / "test.csv"
 
-    if not train_path.exists():
-        raise FileNotFoundError(f"Training data not found at {train_path}")
-    if not test_path.exists():
-        raise FileNotFoundError(f"Test data not found at {test_path}")
+    if not train_path.exists() or not test_path.exists():
+        raise FileNotFoundError(
+            f"Missing required data files in {data_dir}. Ensure 'train.csv' and 'test.csv' are present."
+        )
 
     train = pd.read_csv(train_path)
     test = pd.read_csv(test_path)
@@ -81,29 +81,27 @@ def preprocess_house_prices_data(data_dir: str = "./data") -> tuple:
         "GarageCond",
         "PoolQC",
     ]
-    for col in ord_cols:
-        combined[col] = (
-            combined[col].fillna("None").map(QUALITY_MAP).fillna(0).astype(int)
-        )
+    combined[ord_cols] = combined[ord_cols].apply(
+        lambda x: x.map(QUALITY_MAP).fillna(0).astype(int)
+    )
 
-    combined["BsmtFinType1"] = (
-        combined["BsmtFinType1"].fillna("None").map(BSMT_FIN_MAP).fillna(0).astype(int)
+    bsmt_fin_cols = ["BsmtFinType1", "BsmtFinType2"]
+    combined[bsmt_fin_cols] = combined[bsmt_fin_cols].apply(
+        lambda x: x.map(BSMT_FIN_MAP).fillna(0).astype(int)
     )
-    combined["BsmtFinType2"] = (
-        combined["BsmtFinType2"].fillna("None").map(BSMT_FIN_MAP).fillna(0).astype(int)
-    )
+
     combined["BsmtExposure"] = (
-        combined["BsmtExposure"].fillna("None").map(EXPOSURE_MAP).fillna(0).astype(int)
+        combined["BsmtExposure"].map(EXPOSURE_MAP).fillna(0).astype(int)
     )
 
     # 4. Handle Categoricals & Numeric Imputation
-    cat_cols = [c for c in combined.select_dtypes(include=["object"]).columns]
-    for col in cat_cols:
-        combined[col] = combined[col].fillna("None")
+    cat_cols = combined.select_dtypes(include=["object"]).columns
+    if len(cat_cols) > 0:
+        combined[cat_cols] = combined[cat_cols].fillna("None")
 
-    num_cols = [c for c in combined.select_dtypes(include=[np.number]).columns]
-    for col in num_cols:
-        combined[col] = combined[col].fillna(combined[col].median())
+    num_cols = combined.select_dtypes(include=[np.number]).columns
+    if len(num_cols) > 0:
+        combined[num_cols] = combined[num_cols].fillna(combined[num_cols].median())
 
     # 5. High-Impact Interaction & Age Features
     combined["TotalSF"] = (

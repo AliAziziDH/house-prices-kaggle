@@ -42,8 +42,7 @@ raw_neighborhoods = raw_train["Neighborhood"]
 # Identify categorical features
 cat_features = X_train_raw.select_dtypes(include=["object"]).columns.tolist()
 
-for col in cat_features:
-    X_train_raw[col] = X_train_raw[col].fillna("Missing").astype(str)
+X_train_raw[cat_features] = X_train_raw[cat_features].fillna("Missing").astype(str)
 
 print(f"X_train_raw shape: {X_train_raw.shape}")
 print(f"y_train_log shape: {y_train_log.shape}")
@@ -216,8 +215,7 @@ print("=" * 60)
 X_test_raw = pd.read_csv("./processed_data/X_test_raw.csv")
 test_ids = pd.read_csv("./data/test.csv")["Id"]
 
-for col in cat_features:
-    X_test_raw[col] = X_test_raw[col].fillna("Missing").astype(str)
+X_test_raw[cat_features] = X_test_raw[cat_features].fillna("Missing").astype(str)
 
 y_pred_log = best_model.predict(X_test_raw)
 y_pred_dollars = np.expm1(y_pred_log)
