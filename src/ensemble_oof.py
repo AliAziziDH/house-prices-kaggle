@@ -97,7 +97,7 @@ except NameError:
         (weight_xgb / total) * xgb_pred_original + (weight_catboost / total) * catboost_pred_original
     )
 
-ensemble_pred = np.clip(ensemble_pred, 34900, 755000)
+ensemble_pred = np.clip(ensemble_pred, 42000, 525000)
 
 print(f"Weights: XGBoost = {weight_xgb:.2f}, CatBoost = {weight_catboost:.2f}")
 

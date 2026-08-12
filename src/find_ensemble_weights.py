@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 from catboost import CatBoostRegressor
-from sklearn.model_selection import KFold
 
 from src.metrics import rmsle
 

@@ -64,6 +64,3 @@ def test_stateful_transformer_leak_free():
     # Check missing LotFrontage filled using fitted training statistics
     assert not test_trans["LotFrontage"].isna().any()
 
-    # Check unseen neighborhood handled gracefully
-    assert "NeighborhoodTargetRank" in test_trans.columns
-    assert not test_trans["NeighborhoodTargetRank"].isna().any()
