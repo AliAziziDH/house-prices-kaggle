@@ -1,5 +1,6 @@
 from xgboost import XGBRegressor
-from src.models.base import run_cv_experiment, RANDOM_STATE
+
+from src.models.base import RANDOM_STATE, run_cv_experiment
 
 DEFAULT_XGB_PARAMS = {
     "n_estimators": 500,

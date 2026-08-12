@@ -31,7 +31,7 @@ print("=" * 60)
 
 # Predict from each model (in transformed scale)
 xgb_pred_transformed = xgb_model.predict(X_test)
-catboost_pred_transformed = catboost_model.predict(X_test_raw)
+catboost_pred_transformed = catboost_model.predict(X_test)
 
 # Inverse transform to original scale (dollars)
 xgb_pred_original = pt.inverse_transform(xgb_pred_transformed.reshape(-1, 1)).flatten()

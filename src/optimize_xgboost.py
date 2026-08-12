@@ -1,6 +1,6 @@
 """
 XGBoost Hyperparameter Optimization with Optuna & Early Stopping
-Trained on y_train_log (np.log1p(SalePrice)) directly matching Kaggle RMSLE.
+Trained on y_train directly matching Kaggle RMSLE.
 """
 
 import os
@@ -9,7 +9,7 @@ import joblib
 import numpy as np
 import optuna
 import pandas as pd
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.preprocessing import PowerTransformer
 from xgboost import XGBRegressor
 
@@ -34,7 +34,7 @@ X_train = pd.read_csv("./processed_data/X_train.csv")
 y_train = pd.read_csv("./processed_data/y_train.csv").squeeze()
 
 print(f"X_train shape: {X_train.shape}")
-print(f"y_train_log shape: {y_train_log.shape}")
+print(f"y_train shape: {y_train.shape}")
 
 
 # ============================================
@@ -95,123 +95,129 @@ def objective(trial):
     return avg_rmsle
 
 
-# ============================================
-# RUN OPTIMIZATION
-# ============================================
-print("\n" + "=" * 60)
-print("STARTING XGBOOST OPTIMIZATION WITH EARLY STOPPING")
-print("=" * 60)
+def main():
+    # ============================================
+    # RUN OPTIMIZATION
+    # ============================================
+    print("\n" + "=" * 60)
+    print("STARTING XGBOOST OPTIMIZATION WITH EARLY STOPPING")
+    print("=" * 60)
 
-# Create directories
-os.makedirs("./experiments", exist_ok=True)
-os.makedirs("./models", exist_ok=True)
+    # Create directories
+    os.makedirs("./experiments", exist_ok=True)
+    os.makedirs("./models", exist_ok=True)
 
-study = optuna.create_study(
-    direction="minimize",
-    study_name="xgboost_optimization_rmsle",
-    storage=f"sqlite:///{os.path.abspath('./experiments/xgboost_study_rmsle.db')}",
-    load_if_exists=True,
-)
+    study = optuna.create_study(
+        direction="minimize",
+        study_name="xgboost_optimization_rmsle",
+        storage=f"sqlite:///{os.path.abspath('./experiments/xgboost_study_rmsle.db')}",
+        load_if_exists=True,
+    )
 
-study.optimize(objective, n_trials=N_TRIALS)
+    study.optimize(objective, n_trials=N_TRIALS)
 
-best_params = study.best_params
-best_params_no_rs = {k: v for k, v in best_params.items() if k != "random_state"}
-best_model = XGBRegressor(**best_params_no_rs, random_state=RANDOM_STATE, verbosity=0)
-best_model.fit(X_train, y_transformed)
+    best_params = study.best_params
+    best_params_no_rs = {k: v for k, v in best_params.items() if k != "random_state"}
+    best_model = XGBRegressor(**best_params_no_rs, random_state=RANDOM_STATE, verbosity=0)
+    best_model.fit(X_train, y_transformed)
 
-# Save model and transformer
-joblib.dump(best_model, "./models/xgboost_best_rmsle.pkl")
-joblib.dump(pt, "./models/boxcox_transformer.pkl")
+    # Save model and transformer
+    joblib.dump(best_model, "./models/xgboost_best_rmsle.pkl")
+    joblib.dump(pt, "./models/boxcox_transformer.pkl")
 
-# Save all trial results
-trials_df = study.trials_dataframe()
-trials_df.to_csv("./experiments/xgboost_trials_rmsle.csv", index=False)
+    # Save all trial results
+    trials_df = study.trials_dataframe()
+    trials_df.to_csv("./experiments/xgboost_trials_rmsle.csv", index=False)
 
-print(f"✅ Best RMSLE: {study.best_value:.6f}")
-print(f"✅ Best parameters: {best_params}")
+    print(f"✅ Best RMSLE: {study.best_value:.6f}")
+    print(f"✅ Best parameters: {best_params}")
 
-# ============================================
-# TRAIN FINAL MODEL ON FULL DATA
-# ============================================
-print("\n" + "=" * 60)
-print("TRAINING FINAL XGBOOST MODEL ON FULL DATA")
-print("=" * 60)
+    # ============================================
+    # TRAIN FINAL MODEL ON FULL DATA
+    # ============================================
+    print("\n" + "=" * 60)
+    print("TRAINING FINAL XGBOOST MODEL ON FULL DATA")
+    print("=" * 60)
 
-final_params = best_params.copy()
-final_params.update(
-    {
-        "n_estimators": 2000,
-        "random_state": RANDOM_STATE,
-        "verbosity": 0,
-        "early_stopping_rounds": 50,
-    }
-)
+    final_params = best_params.copy()
+    final_params.update(
+        {
+            "n_estimators": 2000,
+            "random_state": RANDOM_STATE,
+            "verbosity": 0,
+            "early_stopping_rounds": 50,
+        }
+    )
 
-tr_idx, val_idx = train_test_split(
-    np.arange(len(X_train)), test_size=0.1, random_state=RANDOM_STATE
-)
+    tr_idx, val_idx = train_test_split(
+        np.arange(len(X_train)), test_size=0.1, random_state=RANDOM_STATE
+    )
 
-fold_raw_train = raw_train.iloc[tr_idx].copy()
-fold_raw_train["TotalSF"] = (
-    fold_raw_train["TotalBsmtSF"]
-    + fold_raw_train["1stFlrSF"]
-    + fold_raw_train["2ndFlrSF"]
-)
-fold_raw_train["PricePerSF"] = fold_raw_train["SalePrice"] / fold_raw_train["TotalSF"]
+    raw_train = pd.read_csv("./data/train.csv")
+    raw_neighborhoods = raw_train["Neighborhood"]
 
-neigh_order = (
-    fold_raw_train.groupby("Neighborhood")["PricePerSF"].median().sort_values().index
-)
-neigh_map = {n: i + 1 for i, n in enumerate(neigh_order)}
+    fold_raw_train = raw_train.iloc[tr_idx].copy()
+    fold_raw_train["TotalSF"] = (
+        fold_raw_train["TotalBsmtSF"]
+        + fold_raw_train["1stFlrSF"]
+        + fold_raw_train["2ndFlrSF"]
+    )
+    fold_raw_train["PricePerSF"] = fold_raw_train["SalePrice"] / fold_raw_train["TotalSF"]
 
-X_tr = X_train.iloc[tr_idx].copy()
-X_val = X_train.iloc[val_idx].copy()
-y_tr = y_train_log.iloc[tr_idx]
-y_val = y_train_log.iloc[val_idx]
+    neigh_order = (
+        fold_raw_train.groupby("Neighborhood")["PricePerSF"].median().sort_values().index
+    )
+    neigh_map = {n: i + 1 for i, n in enumerate(neigh_order)}
 
-X_tr["Neighborhood"] = (
-    raw_neighborhoods.iloc[tr_idx].map(neigh_map).fillna(13).astype(int)
-)
-X_val["Neighborhood"] = (
-    raw_neighborhoods.iloc[val_idx].map(neigh_map).fillna(13).astype(int)
-)
+    X_tr = X_train.iloc[tr_idx].copy()
+    X_val = X_train.iloc[val_idx].copy()
+    y_tr = y_train.iloc[tr_idx]
+    y_val = y_train.iloc[val_idx]
 
-best_model = XGBRegressor(**final_params)
-best_model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
+    X_tr["Neighborhood"] = (
+        raw_neighborhoods.iloc[tr_idx].map(neigh_map).fillna(13).astype(int)
+    )
+    X_val["Neighborhood"] = (
+        raw_neighborhoods.iloc[val_idx].map(neigh_map).fillna(13).astype(int)
+    )
 
-# Save both original naming and best rmsle versions for compatibility
-joblib.dump(best_model, "./models/xgboost_best.pkl")
-joblib.dump(best_model, "./models/xgboost_best_rmsle.pkl")
+    best_model = XGBRegressor(**final_params)
+    best_model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
 
-trials_df = study.trials_dataframe()
-trials_df.to_csv("./experiments/xgboost_trials_log.csv", index=False)
+    # Save both original naming and best rmsle versions for compatibility
+    joblib.dump(best_model, "./models/xgboost_best.pkl")
+    joblib.dump(best_model, "./models/xgboost_best_rmsle.pkl")
 
-# ============================================
-# GENERATE SUBMISSION
-# ============================================
-print("\n" + "=" * 60)
-print("GENERATING SUBMISSION")
-print("=" * 60)
+    trials_df = study.trials_dataframe()
+    trials_df.to_csv("./experiments/xgboost_trials_log.csv", index=False)
 
-X_test = pd.read_csv("./processed_data/X_test.csv")
-test_ids = pd.read_csv("./data/test.csv")["Id"]
+    # ============================================
+    # GENERATE SUBMISSION
+    # ============================================
+    print("\n" + "=" * 60)
+    print("GENERATING SUBMISSION")
+    print("=" * 60)
 
-y_pred_log = best_model.predict(X_test)
-y_pred_dollars = np.expm1(y_pred_log)
+    X_test = pd.read_csv("./processed_data/X_test.csv")
+    test_ids = pd.read_csv("./data/test.csv")["Id"]
 
-submission = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_original})
-import os
+    y_pred_log = best_model.predict(X_test)
+    y_pred_dollars = np.expm1(y_pred_log)
 
-os.makedirs("./submissions", exist_ok=True)
+    submission = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_dollars})
 
-submission.to_csv("./submissions/submission_xgboost_rmsle.csv", index=False)
+    os.makedirs("./submissions", exist_ok=True)
 
-print("✅ Submission saved to './submissions/submission_xgboost_rmsle.csv'")
-print(f"   Shape: {submission.shape}")
-print("   First 5 rows:")
-print(submission.head())
+    submission.to_csv("./submissions/submission_xgboost_rmsle.csv", index=False)
 
-print("\n" + "=" * 60)
-print("OPTIMIZATION COMPLETED")
-print("=" * 60)
+    print("✅ Submission saved to './submissions/submission_xgboost_rmsle.csv'")
+    print(f"   Shape: {submission.shape}")
+    print("   First 5 rows:")
+    print(submission.head())
+
+    print("\n" + "=" * 60)
+    print("OPTIMIZATION COMPLETED")
+    print("=" * 60)
+
+if __name__ == '__main__':
+    main()

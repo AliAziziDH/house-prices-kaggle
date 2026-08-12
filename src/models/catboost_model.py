@@ -1,5 +1,6 @@
 from catboost import CatBoostRegressor
-from src.models.base import run_cv_experiment, RANDOM_STATE
+
+from src.models.base import RANDOM_STATE, run_cv_experiment
 
 DEFAULT_CAT_PARAMS = {
     "iterations": 1000,

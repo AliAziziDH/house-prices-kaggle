@@ -20,10 +20,10 @@ st.title("🏡 Ames Housing: Prescriptive Decision Intelligence")
 def load_data():
     try:
         df = pd.read_csv("./submissions/submission_with_intervals.csv")
-    except Exception:
+    except Exception: # noqa: BLE001
         try:
             df = pd.read_csv("./submission.csv")
-        except Exception:
+        except Exception: # noqa: BLE001
             # Generate synthetic sample predictions for headless/cloud environment
             rng = np.random.default_rng(42)
             n_samples = 1459
