@@ -93,7 +93,7 @@ def main():
         ):
             neigh_train = raw_neighborhoods.iloc[train_idx]
             neigh_val = raw_neighborhoods.iloc[val_idx]
-            y_tr_orig = np.expm1(y_train_fold)
+            y_tr_orig = y_train_fold
 
             # Simple LOO encoding example (smoothed)
             neigh_means = y_tr_orig.groupby(neigh_train).mean()
@@ -120,9 +120,9 @@ def main():
     print(f"X_train shape: {X_train.shape}")
 
     # Calculate Residual Vectors
-    y_true_orig = np.expm1(y_train)
-    xgb_oof_orig = np.expm1(xgb_oof)
-    cat_oof_orig = np.expm1(cat_oof)
+    y_true_orig = y_train
+    xgb_oof_orig = xgb_oof
+    cat_oof_orig = cat_oof
 
     preds = np.column_stack([xgb_oof_orig, cat_oof_orig])
     model_names = ["xgb", "catboost"]

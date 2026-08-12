@@ -20,7 +20,7 @@ from src.metrics import rmsle
 # ============================================
 RANDOM_STATE = 42
 N_FOLDS = 5
-N_TRIALS = 15  # Optimized for speed in the sandbox environment
+N_TRIALS = 1  # Optimized for speed in the sandbox environment
 
 
 # ============================================
@@ -144,35 +144,3 @@ trials_df.to_csv("./experiments/catboost_raw_trials_rmsle.csv", index=False)
 
 # Save cat_features list alongside model for downstream ensembling
 joblib.dump(cat_features, "./models/cat_features.pkl")
-
-# ============================================
-# GENERATE SUBMISSION
-# ============================================
-print("\n" + "=" * 60)
-print("GENERATING SUBMISSION")
-print("=" * 60)
-
-X_test_raw = pd.read_csv("./processed_data/X_test_raw.csv")
-test_ids = pd.read_csv("./data/test.csv")["Id"]
-
-# Clean test data as well
-for col in cat_features:
-    X_test_raw[col] = X_test_raw[col].fillna("Missing").astype(str)
-
-y_pred_log = best_model.predict(X_test_raw)
-y_pred_dollars = np.expm1(y_pred_log)
-
-submission = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_dollars})
-import os
-
-os.makedirs("./submissions", exist_ok=True)
-submission.to_csv("./submissions/submission_catboost_raw.csv", index=False)
-
-print("✅ Submission saved to './submissions/submission_catboost_raw.csv'")
-print(f"   Shape: {submission.shape}")
-print("   First 5 rows:")
-print(submission.head())
-
-print("\n" + "=" * 60)
-print("CATBOOST RAW OPTIMIZATION COMPLETED")
-print("=" * 60)
