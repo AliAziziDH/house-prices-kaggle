@@ -28,7 +28,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                     X.groupby("Neighborhood")["LotFrontage"].median().to_dict()
                 )
             med_val = X["LotFrontage"].median()
-            self.lot_frontage_global_median_ = float(med_val) if pd.notna(med_val) else 0.0
+            self.lot_frontage_global_median_ = (
+                float(med_val) if pd.notna(med_val) else 0.0
+            )
 
         # 2. Categorical modes
         cat_cols_with_missing = [
@@ -46,7 +48,6 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 mode_val = X[col].mode()
                 if not mode_val.empty:
                     self.categorical_modes_[col] = mode_val[0]
-
 
         # 4. Transform training data to learn final column schema
         X_trans = self._transform_df(X)
@@ -68,7 +69,13 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 df[col] = df[col].fillna(0)
 
         # 2. Basement features
-        bsmt_cat_cols = ["BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2"]
+        bsmt_cat_cols = [
+            "BsmtQual",
+            "BsmtCond",
+            "BsmtExposure",
+            "BsmtFinType1",
+            "BsmtFinType2",
+        ]
         for col in bsmt_cat_cols:
             if col in df.columns:
                 df[col] = df[col].fillna("No Basement")
@@ -99,9 +106,13 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         # 5. LotFrontage imputation using fitted medians
         if "LotFrontage" in df.columns:
             if "Neighborhood" in df.columns and self.lot_frontage_neighborhood_medians_:
-                neigh_series = df["Neighborhood"].map(self.lot_frontage_neighborhood_medians_)
+                neigh_series = df["Neighborhood"].map(
+                    self.lot_frontage_neighborhood_medians_
+                )
                 df["LotFrontage"] = df["LotFrontage"].fillna(neigh_series)
-            df["LotFrontage"] = df["LotFrontage"].fillna(self.lot_frontage_global_median_)
+            df["LotFrontage"] = df["LotFrontage"].fillna(
+                self.lot_frontage_global_median_
+            )
 
         # 6. Categorical mode imputation using fitted modes
         for col, mode_val in self.categorical_modes_.items():
@@ -117,7 +128,10 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         if all(c in df.columns for c in ["TotalBsmtSF", "1stFlrSF", "2ndFlrSF"]):
             df["TotalSF"] = df["TotalBsmtSF"] + df["1stFlrSF"] + df["2ndFlrSF"]
 
-        if all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
+        if all(
+            c in df.columns
+            for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]
+        ):
             df["TotalPorchSF"] = (
                 df["OpenPorchSF"]
                 + df["EnclosedPorch"]
@@ -125,7 +139,10 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 + df["ScreenPorch"]
             )
 
-        if all(c in df.columns for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]):
+        if all(
+            c in df.columns
+            for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]
+        ):
             df["TotalBathrooms"] = (
                 df["FullBath"]
                 + 0.5 * df["HalfBath"]

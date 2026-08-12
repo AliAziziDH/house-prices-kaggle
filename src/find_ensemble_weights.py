@@ -36,6 +36,7 @@ best_params_cat = {
     "verbose": False,
 }
 
+
 # ============================================
 # LOAD DATA
 # ============================================
@@ -43,6 +44,7 @@ def main():
     print("=" * 60)
     print("LOADING PROCESSED DATA FOR ENSEMBLE")
     print("=" * 60)
+
 
 X_train = pd.read_csv("./processed_data/X_train.csv")
 y_train = pd.read_csv("./processed_data/y_train.csv").squeeze()

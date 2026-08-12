@@ -92,7 +92,11 @@ def main():
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
             # LOO formula with smoothing
-            enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
+            enc = (
+                (sum_c - y_i + m * global_mean) / (n_c - 1 + m)
+                if (n_c - 1 + m) > 0
+                else global_mean
+            )
             loo_encodings.append(enc)
 
         X_tr["Neighborhood"] = loo_encodings
@@ -102,7 +106,9 @@ def main():
         for n in val_neighborhoods:
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
-            enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
+            enc = (
+                (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
+            )
             val_encodings.append(enc)
 
         X_va["Neighborhood"] = val_encodings
@@ -113,7 +119,9 @@ def main():
         for n in raw_test_neighborhoods:
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
-            enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
+            enc = (
+                (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
+            )
             test_encodings.append(enc)
         X_te["Neighborhood"] = test_encodings
 
@@ -126,7 +134,9 @@ def main():
         )
         model_lasso = TransformedTargetRegressor(
             regressor=base_lasso,
-            transformer=QuantileTransformer(n_quantiles=900, output_distribution='normal', random_state=42)
+            transformer=QuantileTransformer(
+                n_quantiles=900, output_distribution="normal", random_state=42
+            ),
         )
         model_lasso.fit(X_tr, y_tr)
         oof_lasso[val_idx] = model_lasso.predict(X_va)
@@ -145,7 +155,9 @@ def main():
         )
         model_elasticnet = TransformedTargetRegressor(
             regressor=base_elasticnet,
-            transformer=QuantileTransformer(n_quantiles=900, output_distribution='normal', random_state=42)
+            transformer=QuantileTransformer(
+                n_quantiles=900, output_distribution="normal", random_state=42
+            ),
         )
         model_elasticnet.fit(X_tr, y_tr)
         oof_elasticnet[val_idx] = model_elasticnet.predict(X_va)

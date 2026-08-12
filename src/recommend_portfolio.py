@@ -6,18 +6,22 @@ import pandas as pd
 
 try:
     import pyomo.environ as pyo
+
     PYOMO_AVAILABLE = True
 except ImportError:
     PYOMO_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
+
 def solve_greedy(df, budget, theta):
     """
     Vectorized Greedy Heuristic Solver.
     Sorts by Expected Profit per dollar (ROI) and buys top properties until budget or risk is hit.
     """
-    logging.warning("Pyomo solver failed or unavailable. Falling back to Vectorized Greedy Heuristic Solver.")
+    logging.warning(
+        "Pyomo solver failed or unavailable. Falling back to Vectorized Greedy Heuristic Solver."
+    )
 
     # Calculate Expected Profit and Downside Risk
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
@@ -39,7 +43,9 @@ def solve_greedy(df, budget, theta):
         # Check downside conformal risk constraint:
         # Sum(A_i - L_i) <= theta * Sum(A_i)
         # current_risk + row_risk <= theta * (current_spend + row_spend)
-        if current_risk + row["Downside_Risk"] > theta * (current_spend + row["Asking_Price"]):
+        if current_risk + row["Downside_Risk"] > theta * (
+            current_spend + row["Asking_Price"]
+        ):
             continue
 
         selected_idx.append(row["index"])
@@ -51,6 +57,7 @@ def solve_greedy(df, budget, theta):
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
     df["Conformal_Downside"] = df["Asking_Price"] - df["Price_Lower_Bound"]
     return df
+
 
 def solve_pyomo(df, budget, theta, fractional_mode=True):
     """
@@ -79,25 +86,36 @@ def solve_pyomo(df, budget, theta, fractional_mode=True):
         m.x = pyo.Var(m.I, domain=pyo.Binary)
 
     # Objective
-    m.obj = pyo.Objective(expr=sum(expected_profits[i] * m.x[i] for i in m.I), sense=pyo.maximize)
+    m.obj = pyo.Objective(
+        expr=sum(expected_profits[i] * m.x[i] for i in m.I), sense=pyo.maximize
+    )
 
     # Budget Constraint
-    m.budget_cons = pyo.Constraint(expr=sum(asking_prices[i] * m.x[i] for i in m.I) <= budget)
+    m.budget_cons = pyo.Constraint(
+        expr=sum(asking_prices[i] * m.x[i] for i in m.I) <= budget
+    )
 
     # Risk Constraint: Sum ( (1 - theta) * A_i - L_i ) * x_i <= 0
-    m.risk_cons = pyo.Constraint(expr=sum(((1.0 - theta) * asking_prices[i] - lower_bounds[i]) * m.x[i] for i in m.I) <= 0)
+    m.risk_cons = pyo.Constraint(
+        expr=sum(
+            ((1.0 - theta) * asking_prices[i] - lower_bounds[i]) * m.x[i] for i in m.I
+        )
+        <= 0
+    )
 
     # Solve
-    solver = pyo.SolverFactory('glpk')
+    solver = pyo.SolverFactory("glpk")
 
     if not solver.available():
-        solver = pyo.SolverFactory('cbc')
+        solver = pyo.SolverFactory("cbc")
         if not solver.available():
             raise RuntimeError("No suitable Pyomo solver found.")
 
     results = solver.solve(m, tee=False)
 
-    if (results.solver.status == pyo.SolverStatus.ok) and (results.solver.termination_condition == pyo.TerminationCondition.optimal):
+    if (results.solver.status == pyo.SolverStatus.ok) and (
+        results.solver.termination_condition == pyo.TerminationCondition.optimal
+    ):
         logging.info("Pyomo optimization successful.")
         df["Selected_Fraction"] = [pyo.value(m.x[i]) for i in m.I]
         df["Expected_Profit"] = expected_profits
@@ -115,7 +133,7 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     # 1. Load Data
     input_path = "./submissions/submission_with_intervals.csv"
     if not os.path.exists(input_path):
-        input_path = "./submissions/submission_ensemble_final.csv" # Fallback if intervals missing
+        input_path = "./submissions/submission_ensemble_final.csv"  # Fallback if intervals missing
         if not os.path.exists(input_path):
             raise FileNotFoundError("Could not find submission files.")
 
@@ -123,7 +141,9 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
 
     # Ensure interval bounds exist
     if "Price_Lower_Bound" not in df.columns:
-        logging.warning("Conformal bounds missing. Simulating 5% bounds for optimization.")
+        logging.warning(
+            "Conformal bounds missing. Simulating 5% bounds for optimization."
+        )
         df["Price_Lower_Bound"] = df["SalePrice"] * 0.95
         df["Price_Upper_Bound"] = df["SalePrice"] * 1.05
 
@@ -137,21 +157,28 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     # 3. Optimize
     try:
         res_df = solve_pyomo(df.copy(), budget, theta, fractional_mode)
-    except Exception as e: # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         logging.error(f"Optimization exception: {e}")
         res_df = solve_greedy(df.copy(), budget, theta)
 
     # 4. Save
     output_cols = [
-        "Id", "SalePrice_pred", "Asking_Price", "Price_Lower_Bound",
-        "Expected_Profit", "Conformal_Downside", "Selected_Fraction"
+        "Id",
+        "SalePrice_pred",
+        "Asking_Price",
+        "Price_Lower_Bound",
+        "Expected_Profit",
+        "Conformal_Downside",
+        "Selected_Fraction",
     ]
 
     # Filter for selected
     res_df = res_df[res_df["Selected_Fraction"] > 0.001].copy()
 
     os.makedirs("./submissions", exist_ok=True)
-    res_df[output_cols].to_csv("./submissions/portfolio_recommendation.csv", index=False)
+    res_df[output_cols].to_csv(
+        "./submissions/portfolio_recommendation.csv", index=False
+    )
 
     total_spend = (res_df["Asking_Price"] * res_df["Selected_Fraction"]).sum()
     total_profit = (res_df["Expected_Profit"] * res_df["Selected_Fraction"]).sum()
@@ -160,8 +187,11 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     print(f"✅ Portfolio optimization complete. Selected {len(res_df)} properties.")
     print(f"   Total Budget Spent: ${total_spend:,.2f} / ${budget:,.2f}")
     print(f"   Total Expected Profit: ${total_profit:,.2f}")
-    print(f"   Max Downside Risk: ${total_downside:,.2f} ({(total_downside/total_spend)*100:.1f}% of spend)")
+    print(
+        f"   Max Downside Risk: ${total_downside:,.2f} ({(total_downside / total_spend) * 100:.1f}% of spend)"
+    )
     print("✅ Results saved to './submissions/portfolio_recommendation.csv'")
+
 
 if __name__ == "__main__":
     recommend_portfolio()
