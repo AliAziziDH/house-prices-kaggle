@@ -1,6 +1,6 @@
 """
 CatBoost Optimization with Optuna (Native Categoricals & Early Stopping)
-Trained on y_train_log (np.log1p(SalePrice)) directly matching Kaggle RMSLE.
+Trained on y_train (np.log1p(SalePrice)) directly matching Kaggle RMSLE.
 """
 
 import os
@@ -41,7 +41,7 @@ for col in cat_features:
     X_train_raw[col] = X_train_raw[col].fillna("Missing").astype(str)
 
 print(f"X_train_raw shape: {X_train_raw.shape}")
-print(f"y_train_log shape: {y_train_log.shape}")
+print(f"y_train shape: {y_train.shape}")
 print(f"Categorical features count: {len(cat_features)}")
 
 # ============================================
@@ -92,12 +92,12 @@ def objective(trial):
 
         y_pred_transformed = model.predict(X_val_fold)
 
-        y_pred_original = pt.inverse_transform(
+        y_pred_dollars = pt.inverse_transform(
             y_pred_transformed.reshape(-1, 1)
         ).flatten()
         y_val_original = pt.inverse_transform(y_val_fold.reshape(-1, 1)).flatten()
 
-        rmsle_score = rmsle(y_val_original, y_pred_original)
+        rmsle_score = rmsle(y_val_original, y_pred_dollars)
         rmsle_scores.append(rmsle_score)
 
     return np.mean(rmsle_scores)
@@ -162,7 +162,7 @@ for col in cat_features:
 y_pred_log = best_model.predict(X_test_raw)
 y_pred_dollars = np.expm1(y_pred_log)
 
-submission = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_original})
+submission = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_dollars})
 import os
 
 os.makedirs("./submissions", exist_ok=True)
