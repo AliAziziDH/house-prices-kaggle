@@ -16,8 +16,6 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         self.lot_frontage_neighborhood_medians_ = {}
         self.lot_frontage_global_median_ = 0.0
         self.categorical_modes_ = {}
-        self.neighborhood_target_ranks_ = {}
-        self.global_neighborhood_rank_ = 0.0
         self.feature_columns_ = []
 
     def fit(self, X, y=None):
@@ -30,7 +28,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                     X.groupby("Neighborhood")["LotFrontage"].median().to_dict()
                 )
             med_val = X["LotFrontage"].median()
-            self.lot_frontage_global_median_ = float(med_val) if pd.notna(med_val) else 0.0
+            self.lot_frontage_global_median_ = (
+                float(med_val) if pd.notna(med_val) else 0.0
+            )
 
         # 2. Categorical modes
         cat_cols_with_missing = [
@@ -48,16 +48,6 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 mode_val = X[col].mode()
                 if not mode_val.empty:
                     self.categorical_modes_[col] = mode_val[0]
-
-        # 3. Neighborhood Target Ranking (if y is provided)
-        if y is not None and "Neighborhood" in X.columns:
-            df_target = pd.DataFrame({"Neighborhood": X["Neighborhood"], "Target": y})
-            neigh_medians = df_target.groupby("Neighborhood")["Target"].median()
-            neigh_ranks = neigh_medians.rank(method="min").to_dict()
-            self.neighborhood_target_ranks_ = neigh_ranks
-            self.global_neighborhood_rank_ = (
-                float(np.median(list(neigh_ranks.values()))) if neigh_ranks else 0.0
-            )
 
         # 4. Transform training data to learn final column schema
         X_trans = self._transform_df(X)
@@ -79,7 +69,13 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 df[col] = df[col].fillna(0)
 
         # 2. Basement features
-        bsmt_cat_cols = ["BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2"]
+        bsmt_cat_cols = [
+            "BsmtQual",
+            "BsmtCond",
+            "BsmtExposure",
+            "BsmtFinType1",
+            "BsmtFinType2",
+        ]
         for col in bsmt_cat_cols:
             if col in df.columns:
                 df[col] = df[col].fillna("No Basement")
@@ -110,9 +106,13 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         # 5. LotFrontage imputation using fitted medians
         if "LotFrontage" in df.columns:
             if "Neighborhood" in df.columns and self.lot_frontage_neighborhood_medians_:
-                neigh_series = df["Neighborhood"].map(self.lot_frontage_neighborhood_medians_)
+                neigh_series = df["Neighborhood"].map(
+                    self.lot_frontage_neighborhood_medians_
+                )
                 df["LotFrontage"] = df["LotFrontage"].fillna(neigh_series)
-            df["LotFrontage"] = df["LotFrontage"].fillna(self.lot_frontage_global_median_)
+            df["LotFrontage"] = df["LotFrontage"].fillna(
+                self.lot_frontage_global_median_
+            )
 
         # 6. Categorical mode imputation using fitted modes
         for col, mode_val in self.categorical_modes_.items():
@@ -128,7 +128,10 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         if all(c in df.columns for c in ["TotalBsmtSF", "1stFlrSF", "2ndFlrSF"]):
             df["TotalSF"] = df["TotalBsmtSF"] + df["1stFlrSF"] + df["2ndFlrSF"]
 
-        if all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
+        if all(
+            c in df.columns
+            for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]
+        ):
             df["TotalPorchSF"] = (
                 df["OpenPorchSF"]
                 + df["EnclosedPorch"]
@@ -136,7 +139,10 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 + df["ScreenPorch"]
             )
 
-        if all(c in df.columns for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]):
+        if all(
+            c in df.columns
+            for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]
+        ):
             df["TotalBathrooms"] = (
                 df["FullBath"]
                 + 0.5 * df["HalfBath"]
@@ -158,11 +164,6 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             df["GarageAge"] = np.where(
                 df["GarageYrBlt"] == 0, 0, df["YrSold"] - df["GarageYrBlt"]
             )
-
-        # Neighborhood Target Rank feature
-        if "Neighborhood" in df.columns and self.neighborhood_target_ranks_:
-            mapped_ranks = df["Neighborhood"].map(self.neighborhood_target_ranks_)
-            df["NeighborhoodTargetRank"] = mapped_ranks.fillna(self.global_neighborhood_rank_)
 
         # 8. Ordinal encoding
         quality_map = {"Po": 1, "Fa": 2, "TA": 3, "Gd": 4, "Ex": 5}
@@ -213,6 +214,10 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         nominal_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
         if nominal_cols:
             df = pd.get_dummies(df, columns=nominal_cols, drop_first=True)
+
+        # 10. VIF Enforcer: Drop highly collinear features
+        vif_drops = ["GarageArea", "TotRmsAbvGrd", "1stFlrSF"]
+        df = df.drop(columns=[col for col in vif_drops if col in df.columns])
 
         return df
 

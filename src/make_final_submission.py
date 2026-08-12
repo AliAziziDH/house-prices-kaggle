@@ -37,6 +37,10 @@ weight_xgb = 0.64
 weight_catboost = 0.36
 final_pred = weight_xgb * xgb_pred_orig + weight_catboost * catboost_pred_orig
 
+import numpy as np
+
+final_pred = np.clip(final_pred, 42000, 525000)
+
 import os
 
 os.makedirs("./submissions", exist_ok=True)
