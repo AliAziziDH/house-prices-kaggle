@@ -10,166 +10,205 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.compose import TransformedTargetRegressor
-from sklearn.linear_model import ElasticNetCV, LassoCV
-from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import ElasticNetCV, LassoCV, RidgeCV
 from sklearn.model_selection import KFold
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import QuantileTransformer, RobustScaler
+from sklearn.preprocessing import RobustScaler
 
-# ============================================
-# CONFIGURATION
-# ============================================
-RANDOM_STATE: int = 42
-N_FOLDS: int = 5
+RANDOM_STATE = 42
+N_FOLDS = 5
 
 
 def main():
-
-    # ============================================
-    # LOAD DATA
-    # ============================================
     print("=" * 60)
     print("LOADING PROCESSED DATA FOR LINEAR MODELS")
     print("=" * 60)
 
-    X_train = pd.read_csv("./processed_data/X_train.csv")
-    X_test = pd.read_csv("./processed_data/X_test.csv")
-    y_train_log = pd.read_csv("./processed_data/y_train_log.csv").squeeze()
+    # 100% data
+    X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
+    y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
 
-    # Load original raw train data to prevent target leakage in Neighborhood encoding
+    # 90% data
+    X_train_90 = pd.read_csv("./processed_data/X_train.csv")
+    y_train_90 = pd.read_csv("./processed_data/y_train.csv").squeeze()
+
+    pd.read_csv("./processed_data/X_test.csv")
+
     raw_train = pd.read_csv("./data/train.csv")
     raw_train = raw_train[~((raw_train["GrLivArea"] > 4000) & (raw_train["SalePrice"] < 200000))].reset_index(drop=True)
     raw_neighborhoods = raw_train["Neighborhood"]
-    raw_test = pd.read_csv("./data/test.csv")
-    raw_test_neighborhoods = raw_test["Neighborhood"]
 
-    print(f"X_train shape: {X_train.shape}")
-    print(f"X_test shape: {X_test.shape}")
-    print(f"y_train_log shape: {y_train_log.shape}")
-
-    # ============================================
-    # 5-FOLD CROSS-VALIDATION OOF PREDICTIONS
-    # ============================================
     print("\n" + "=" * 60)
-    print("TRAINING LASSO & ELASTICNET WITH ROBUSTSCALER (5-FOLD CV)")
+    print("TRAINING LASSO, RIDGE & ELASTICNET WITH ROBUSTSCALER (5-FOLD CV)")
     print("=" * 60)
 
     kf = KFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
 
-    oof_lasso = np.zeros(len(X_train))
-    oof_elasticnet = np.zeros(len(X_train))
+    oof_lasso = np.zeros(len(X_train_full))
+    oof_ridge = np.zeros(len(X_train_full))
+    oof_elasticnet = np.zeros(len(X_train_full))
 
-    test_preds_lasso = np.zeros(len(X_test))
-    test_preds_elasticnet = np.zeros(len(X_test))
+    alphas_lasso = np.logspace(-5, 1, 50)
+    alphas_ridge = np.logspace(-3, 3, 50)
+    alphas_elasticnet = np.logspace(-5, 1, 50)
+    l1_ratios = [0.1, 0.5, 0.7, 0.9, 0.95, 0.99]
 
-    alphas_lasso = np.logspace(-5, 1, 100)
-    alphas_elasticnet = np.logspace(-5, 1, 100)
-    l1_ratios = [0.1, 0.3, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99]
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X_train_full)):
+        X_tr, X_va = X_train_full.iloc[train_idx].copy(), X_train_full.iloc[val_idx].copy()
+        y_tr = y_train_full.iloc[train_idx]
 
-    for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
-        print(f"  Fold {fold + 1}/{N_FOLDS}...")
-        X_tr, X_va = X_train.iloc[train_idx].copy(), X_train.iloc[val_idx].copy()
-        y_tr = y_train_log.iloc[train_idx]
-
-        # Leakage-Free Smoothed Leave-One-Out (LOO) Target Encoding
         train_neighborhoods = raw_neighborhoods.iloc[train_idx]
         val_neighborhoods = raw_neighborhoods.iloc[val_idx]
 
-        # Calculate global mean of the target in the training fold
         global_mean = y_tr.mean()
-
-        # Calculate neighborhood sums and counts in the training fold
         neigh_sums = y_tr.groupby(train_neighborhoods).sum()
         neigh_counts = train_neighborhoods.value_counts()
+        m = 20
 
-        m = 20  # Smoothing parameter
-
-        # Apply LOO encoding for the training fold
         loo_encodings = []
         for n, y_i in zip(train_neighborhoods, y_tr):
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
-            # LOO formula with smoothing
             enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
             loo_encodings.append(enc)
-
         X_tr["Neighborhood"] = loo_encodings
 
-        # Apply smoothed category means for the validation fold
         val_encodings = []
         for n in val_neighborhoods:
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
             enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
             val_encodings.append(enc)
-
         X_va["Neighborhood"] = val_encodings
 
-        # Apply smoothed category means for the test set
-        X_te = X_test.copy()
-        test_encodings = []
-        for n in raw_test_neighborhoods:
-            sum_c = neigh_sums.get(n, 0)
-            n_c = neigh_counts.get(n, 0)
-            enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
-            test_encodings.append(enc)
-        X_te["Neighborhood"] = test_encodings
-
-        # 1. Lasso Pipeline with TransformedTargetRegressor
         base_lasso = make_pipeline(
-            RobustScaler(),
-            LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=10000),
+            RobustScaler(), LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1)
         )
-        model_lasso = TransformedTargetRegressor(
-            regressor=base_lasso,
-            transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal", random_state=42),
-        )
+        model_lasso = TransformedTargetRegressor(regressor=base_lasso, func=np.log1p, inverse_func=np.expm1)
         model_lasso.fit(X_tr, y_tr)
         oof_lasso[val_idx] = model_lasso.predict(X_va)
-        test_preds_lasso += model_lasso.predict(X_te) / N_FOLDS
 
-        # 2. ElasticNet Pipeline with TransformedTargetRegressor
+        base_ridge = make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5))
+        model_ridge = TransformedTargetRegressor(regressor=base_ridge, func=np.log1p, inverse_func=np.expm1)
+        model_ridge.fit(X_tr, y_tr)
+        oof_ridge[val_idx] = model_ridge.predict(X_va)
+
         base_elasticnet = make_pipeline(
             RobustScaler(),
             ElasticNetCV(
-                alphas=alphas_elasticnet,
-                l1_ratio=l1_ratios,
-                cv=5,
-                random_state=RANDOM_STATE,
-                max_iter=10000,
+                alphas=alphas_elasticnet, l1_ratio=l1_ratios, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1
             ),
         )
-        model_elasticnet = TransformedTargetRegressor(
-            regressor=base_elasticnet,
-            transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal", random_state=42),
-        )
+        model_elasticnet = TransformedTargetRegressor(regressor=base_elasticnet, func=np.log1p, inverse_func=np.expm1)
         model_elasticnet.fit(X_tr, y_tr)
         oof_elasticnet[val_idx] = model_elasticnet.predict(X_va)
-        test_preds_elasticnet += model_elasticnet.predict(X_te) / N_FOLDS
 
-    # ============================================
-    # EVALUATE OOF SCORES
-    # ============================================
-    rmsle_lasso = np.sqrt(mean_squared_error(y_train_log, oof_lasso))
-    rmsle_elasticnet = np.sqrt(mean_squared_error(y_train_log, oof_elasticnet))
+    print("\nTRAINING 100% LINEAR MODELS...")
+    global_mean_full = y_train_full.mean()
+    neigh_sums_full = y_train_full.groupby(raw_neighborhoods).sum()
+    neigh_counts_full = raw_neighborhoods.value_counts()
 
-    print("\n" + "-" * 40)
-    print("LINEAR MODELS OOF RMSLE SCORES:")
-    print("-" * 40)
-    print(f"  Lasso OOF RMSLE:      {rmsle_lasso:.6f}")
-    print(f"  ElasticNet OOF RMSLE: {rmsle_elasticnet:.6f}")
+    X_train_full_enc = X_train_full.copy()
+    full_encodings = []
+    for n, y_i in zip(raw_neighborhoods, y_train_full):
+        sum_c = neigh_sums_full.get(n, 0)
+        n_c = neigh_counts_full.get(n, 0)
+        enc = (sum_c - y_i + m * global_mean_full) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_full
+        full_encodings.append(enc)
+    X_train_full_enc["Neighborhood"] = full_encodings
 
-    # ============================================
-    # SAVE ARTIFACTS
-    # ============================================
+    model_lasso_full = TransformedTargetRegressor(
+        regressor=make_pipeline(
+            RobustScaler(), LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1)
+        ),
+        func=np.log1p,
+        inverse_func=np.expm1,
+    )
+    model_lasso_full.fit(X_train_full_enc, y_train_full)
+
+    model_ridge_full = TransformedTargetRegressor(
+        regressor=make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5)), func=np.log1p, inverse_func=np.expm1
+    )
+    model_ridge_full.fit(X_train_full_enc, y_train_full)
+
+    model_elasticnet_full = TransformedTargetRegressor(
+        regressor=make_pipeline(
+            RobustScaler(),
+            ElasticNetCV(
+                alphas=alphas_elasticnet, l1_ratio=l1_ratios, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1
+            ),
+        ),
+        func=np.log1p,
+        inverse_func=np.expm1,
+    )
+    model_elasticnet_full.fit(X_train_full_enc, y_train_full)
+
+    print("TRAINING 90% LINEAR MODELS...")
+    from sklearn.model_selection import train_test_split
+
+    raw_neighborhoods_proper, _ = train_test_split(raw_neighborhoods, test_size=0.1, random_state=42)
+
+    global_mean_90 = y_train_90.mean()
+    neigh_sums_90 = y_train_90.groupby(raw_neighborhoods_proper).sum()
+    neigh_counts_90 = raw_neighborhoods_proper.value_counts()
+
+    X_train_90_enc = X_train_90.copy()
+    encodings_90 = []
+    for n, y_i in zip(raw_neighborhoods_proper, y_train_90):
+        sum_c = neigh_sums_90.get(n, 0)
+        n_c = neigh_counts_90.get(n, 0)
+        enc = (sum_c - y_i + m * global_mean_90) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_90
+        encodings_90.append(enc)
+    X_train_90_enc["Neighborhood"] = encodings_90
+
+    model_lasso_90 = TransformedTargetRegressor(
+        regressor=make_pipeline(
+            RobustScaler(), LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1)
+        ),
+        func=np.log1p,
+        inverse_func=np.expm1,
+    )
+    model_lasso_90.fit(X_train_90_enc, y_train_90)
+
+    model_ridge_90 = TransformedTargetRegressor(
+        regressor=make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5)), func=np.log1p, inverse_func=np.expm1
+    )
+    model_ridge_90.fit(X_train_90_enc, y_train_90)
+
+    model_elasticnet_90 = TransformedTargetRegressor(
+        regressor=make_pipeline(
+            RobustScaler(),
+            ElasticNetCV(
+                alphas=alphas_elasticnet, l1_ratio=l1_ratios, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1
+            ),
+        ),
+        func=np.log1p,
+        inverse_func=np.expm1,
+    )
+    model_elasticnet_90.fit(X_train_90_enc, y_train_90)
+
+    from src.metrics import rmsle
+
+    rmsle(y_train_full, oof_lasso)
+    rmsle(y_train_full, oof_ridge)
+    rmsle(y_train_full, oof_elasticnet)
+
     os.makedirs("./models", exist_ok=True)
+    os.makedirs("./processed_data", exist_ok=True)
 
-    joblib.dump(oof_lasso, "./models/oof_lasso.pkl")
-    joblib.dump(oof_elasticnet, "./models/oof_elasticnet.pkl")
-    joblib.dump(test_preds_lasso, "./models/test_preds_lasso.pkl")
-    joblib.dump(test_preds_elasticnet, "./models/test_preds_elasticnet.pkl")
+    pd.Series(oof_lasso).to_csv("./processed_data/oof_lasso.csv", index=False)
+    pd.Series(oof_ridge).to_csv("./processed_data/oof_ridge.csv", index=False)
+    pd.Series(oof_elasticnet).to_csv("./processed_data/oof_elasticnet.csv", index=False)
 
-    print("\n✅ OOF and Test predictions saved successfully to ./models/")
+    joblib.dump(model_lasso_full, "./models/lasso_best_rmsle.pkl")
+    joblib.dump(model_ridge_full, "./models/ridge_best_rmsle.pkl")
+    joblib.dump(model_elasticnet_full, "./models/elasticnet_best_rmsle.pkl")
+
+    joblib.dump(model_lasso_90, "./models/lasso_90.pkl")
+    joblib.dump(model_ridge_90, "./models/ridge_90.pkl")
+    joblib.dump(model_elasticnet_90, "./models/elasticnet_90.pkl")
+
+    print("\n✅ OOF and models saved successfully.")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,6 @@ import numpy as np
 import optuna
 import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
-from sklearn.preprocessing import PowerTransformer
 from xgboost import XGBRegressor
 
 from src.metrics import rmsle
@@ -18,19 +17,13 @@ print("=" * 60)
 print("LOADING PROCESSED DATA FOR XGBOOST")
 print("=" * 60)
 
-# Full data for finding optimal hyperparameters and final model
 X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
 y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
+y_full_transformed = np.log1p(y_train_full.values)
 
-pt_full = PowerTransformer(method="box-cox")
-y_full_transformed = pt_full.fit_transform(y_train_full.values.reshape(-1, 1)).flatten()
-
-# 90% data for conformal calibration model
 X_train_90 = pd.read_csv("./processed_data/X_train.csv")
 y_train_90 = pd.read_csv("./processed_data/y_train.csv").squeeze()
-
-pt_90 = PowerTransformer(method="box-cox")
-y_90_transformed = pt_90.fit_transform(y_train_90.values.reshape(-1, 1)).flatten()
+y_90_transformed = np.log1p(y_train_90.values)
 
 
 def objective(trial):
@@ -47,21 +40,13 @@ def objective(trial):
     model = XGBRegressor(**params)
     kf = KFold(n_splits=N_FOLDS, shuffle=True, random_state=RANDOM_STATE)
     rmsle_scores = []
-
-    # We optimize on the full data
     for train_idx, val_idx in kf.split(X_train_full):
-        X_train_fold, X_val_fold = (
-            X_train_full.iloc[train_idx],
-            X_train_full.iloc[val_idx],
-        )
-        y_train_fold, y_val_fold = (
-            y_full_transformed[train_idx],
-            y_full_transformed[val_idx],
-        )
+        X_train_fold, X_val_fold = X_train_full.iloc[train_idx], X_train_full.iloc[val_idx]
+        y_train_fold, y_val_fold = y_full_transformed[train_idx], y_full_transformed[val_idx]
         model.fit(X_train_fold, y_train_fold)
         y_pred_transformed = model.predict(X_val_fold)
-        y_pred_original = pt_full.inverse_transform(y_pred_transformed.reshape(-1, 1)).flatten()
-        y_val_original = pt_full.inverse_transform(y_val_fold.reshape(-1, 1)).flatten()
+        y_pred_original = np.expm1(y_pred_transformed)
+        y_val_original = np.expm1(y_val_fold)
         rmsle_score = rmsle(y_val_original, y_pred_original)
         rmsle_scores.append(rmsle_score)
     return np.mean(rmsle_scores)
@@ -70,56 +55,36 @@ def objective(trial):
 def main():
     os.makedirs("./experiments", exist_ok=True)
     os.makedirs("./models", exist_ok=True)
-
     study = optuna.create_study(
         direction="minimize",
         study_name="xgboost_optimization_rmsle",
         storage=f"sqlite:///{os.path.abspath('./experiments/xgboost_study_rmsle.db')}",
         load_if_exists=True,
     )
-
     study.optimize(objective, n_trials=N_TRIALS)
-
     best_params = study.best_params
-
     final_params = best_params.copy()
-    final_params.update(
-        {
-            "n_estimators": 2000,
-            "random_state": RANDOM_STATE,
-            "verbosity": 0,
-            "early_stopping_rounds": 50,
-        }
-    )
+    final_params.update({"n_estimators": 2000, "random_state": RANDOM_STATE, "verbosity": 0, "early_stopping_rounds": 50})
 
-    # --- TRAIN 100% MODEL ---
     print("\nTRAINING 100% XGBOOST MODEL")
     tr_idx, val_idx = train_test_split(np.arange(len(X_train_full)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr = X_train_full.iloc[tr_idx].copy()
     X_val = X_train_full.iloc[val_idx].copy()
     y_tr = y_full_transformed[tr_idx]
     y_val = y_full_transformed[val_idx]
-
     best_model_full = XGBRegressor(**final_params)
     best_model_full.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
-
-    # Note: we save boxcox for full
     joblib.dump(best_model_full, "./models/xgboost_best_rmsle.pkl")
-    joblib.dump(pt_full, "./models/boxcox_transformer.pkl")
 
-    # --- TRAIN 90% MODEL ---
     print("\nTRAINING 90% XGBOOST MODEL")
     tr_idx_90, val_idx_90 = train_test_split(np.arange(len(X_train_90)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr_90 = X_train_90.iloc[tr_idx_90].copy()
     X_val_90 = X_train_90.iloc[val_idx_90].copy()
     y_tr_90 = y_90_transformed[tr_idx_90]
     y_val_90 = y_90_transformed[val_idx_90]
-
     best_model_90 = XGBRegressor(**final_params)
     best_model_90.fit(X_tr_90, y_tr_90, eval_set=[(X_val_90, y_val_90)], verbose=False)
-
     joblib.dump(best_model_90, "./models/xgboost_90.pkl")
-    joblib.dump(pt_90, "./models/boxcox_transformer_90.pkl")
 
     trials_df = study.trials_dataframe()
     trials_df.to_csv("./experiments/xgboost_trials_log.csv", index=False)
