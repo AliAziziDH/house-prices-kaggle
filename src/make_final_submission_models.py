@@ -1,3 +1,9 @@
+import os
+
+import pandas as pd
+import xgboost as xgb
+from catboost import CatBoostRegressor
+
 """
 Generate final submissions for Kaggle using the best models.
 Two versions:
@@ -5,9 +11,6 @@ Two versions:
 2. Weighted Ensemble (XGB 0.14 + Cat 0.86) – based on OOF optimization
 """
 
-import pandas as pd
-import xgboost as xgb
-from catboost import CatBoostRegressor
 
 # ============================================
 # LOAD DATA
@@ -91,7 +94,6 @@ print("CREATING SUBMISSION FILES")
 print("=" * 60)
 
 # 1. CatBoost only
-import os
 
 os.makedirs("./submissions", exist_ok=True)
 

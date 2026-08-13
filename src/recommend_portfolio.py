@@ -20,14 +20,12 @@ def solve_greedy(df, budget, theta):
     Vectorized Greedy Heuristic Solver.
     Sorts by Expected Profit per dollar (ROI) and buys top properties until budget or risk is hit.
     """
-    logger.warning(
-        "Pyomo solver failed or unavailable. Falling back to Vectorized Greedy Heuristic Solver."
-    )
+    logger.warning("Pyomo solver failed or unavailable. Falling back to Vectorized Greedy Heuristic Solver.")
 
     # Calculate Expected Profit and Downside Risk
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
     df["ROI"] = df["Expected_Profit"] / df["Asking_Price"]
-    df["Downside_Risk"] = df["Asking_Price"] - df["Price_Lower_Bound"]
+    df["Downside_Risk"] = df["Asking_Price"] - df["SalePrice_Lower"]
 
     # Sort by ROI descending
     df_sorted = df.sort_values("ROI", ascending=False).reset_index()
@@ -44,9 +42,7 @@ def solve_greedy(df, budget, theta):
         # Check downside conformal risk constraint:
         # Sum(A_i - L_i) <= theta * Sum(A_i)
         # current_risk + row_risk <= theta * (current_spend + row_spend)
-        if current_risk + row["Downside_Risk"] > theta * (
-            current_spend + row["Asking_Price"]
-        ):
+        if current_risk + row["Downside_Risk"] > theta * (current_spend + row["Asking_Price"]):
             continue
 
         selected_idx.append(row["index"])
@@ -56,7 +52,7 @@ def solve_greedy(df, budget, theta):
     df["Selected_Fraction"] = 0.0
     df.loc[selected_idx, "Selected_Fraction"] = 1.0
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
-    df["Conformal_Downside"] = df["Asking_Price"] - df["Price_Lower_Bound"]
+    df["Conformal_Downside"] = df["Asking_Price"] - df["SalePrice_Lower"]
     return df
 
 
@@ -72,7 +68,7 @@ def solve_pyomo(df, budget, theta, fractional_mode=True):
     N = len(df)
     asking_prices = df["Asking_Price"].values
     expected_profits = (df["SalePrice_pred"] - df["Asking_Price"]).values
-    lower_bounds = df["Price_Lower_Bound"].values
+    lower_bounds = df["SalePrice_Lower"].values
 
     # Create model
     m = pyo.ConcreteModel()
@@ -87,22 +83,13 @@ def solve_pyomo(df, budget, theta, fractional_mode=True):
         m.x = pyo.Var(m.I, domain=pyo.Binary)
 
     # Objective
-    m.obj = pyo.Objective(
-        expr=sum(expected_profits[i] * m.x[i] for i in m.I), sense=pyo.maximize
-    )
+    m.obj = pyo.Objective(expr=sum(expected_profits[i] * m.x[i] for i in m.I), sense=pyo.maximize)
 
     # Budget Constraint
-    m.budget_cons = pyo.Constraint(
-        expr=sum(asking_prices[i] * m.x[i] for i in m.I) <= budget
-    )
+    m.budget_cons = pyo.Constraint(expr=sum(asking_prices[i] * m.x[i] for i in m.I) <= budget)
 
     # Risk Constraint: Sum ( (1 - theta) * A_i - L_i ) * x_i <= 0
-    m.risk_cons = pyo.Constraint(
-        expr=sum(
-            ((1.0 - theta) * asking_prices[i] - lower_bounds[i]) * m.x[i] for i in m.I
-        )
-        <= 0
-    )
+    m.risk_cons = pyo.Constraint(expr=sum(((1.0 - theta) * asking_prices[i] - lower_bounds[i]) * m.x[i] for i in m.I) <= 0)
 
     # Solve
     solver = pyo.SolverFactory("glpk")
@@ -141,12 +128,10 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     df = pd.read_csv(input_path)
 
     # Ensure interval bounds exist
-    if "Price_Lower_Bound" not in df.columns:
-        logger.warning(
-            "Conformal bounds missing. Simulating 5% bounds for optimization."
-        )
-        df["Price_Lower_Bound"] = df["SalePrice"] * 0.95
-        df["Price_Upper_Bound"] = df["SalePrice"] * 1.05
+    if "SalePrice_Lower" not in df.columns:
+        logger.warning("Conformal bounds missing. Simulating 5% bounds for optimization.")
+        df["SalePrice_Lower"] = df["SalePrice"] * 0.95
+        df["SalePrice_Upper"] = df["SalePrice"] * 1.05
 
     df = df.rename(columns={"SalePrice": "SalePrice_pred"})
 
@@ -167,7 +152,7 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
         "Id",
         "SalePrice_pred",
         "Asking_Price",
-        "Price_Lower_Bound",
+        "SalePrice_Lower",
         "Expected_Profit",
         "Conformal_Downside",
         "Selected_Fraction",
@@ -177,9 +162,7 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     res_df = res_df[res_df["Selected_Fraction"] > 0.001].copy()
 
     os.makedirs("./submissions", exist_ok=True)
-    res_df[output_cols].to_csv(
-        "./submissions/portfolio_recommendation.csv", index=False
-    )
+    res_df[output_cols].to_csv("./submissions/portfolio_recommendation.csv", index=False)
 
     total_spend = (res_df["Asking_Price"] * res_df["Selected_Fraction"]).sum()
     total_profit = (res_df["Expected_Profit"] * res_df["Selected_Fraction"]).sum()
@@ -188,9 +171,7 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=True):
     print(f"✅ Portfolio optimization complete. Selected {len(res_df)} properties.")
     print(f"   Total Budget Spent: ${total_spend:,.2f} / ${budget:,.2f}")
     print(f"   Total Expected Profit: ${total_profit:,.2f}")
-    print(
-        f"   Max Downside Risk: ${total_downside:,.2f} ({(total_downside / total_spend) * 100:.1f}% of spend)"
-    )
+    print(f"   Max Downside Risk: ${total_downside:,.2f} ({(total_downside / total_spend) * 100:.1f}% of spend)")
     print("✅ Results saved to './submissions/portfolio_recommendation.csv'")
 
 

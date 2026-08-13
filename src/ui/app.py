@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from recommend_portfolio import solve_greedy, solve_pyomo
+from src.recommend_portfolio import solve_greedy, solve_pyomo
 
 # ============================================
 # PAGE CONFIGURATION
@@ -32,8 +32,8 @@ def load_data():
                 {
                     "Id": np.arange(1461, 1461 + n_samples),
                     "SalePrice": preds,
-                    "SalePrice_lower": preds * 0.9,
-                    "SalePrice_upper": preds * 1.1,
+                    "SalePrice_Lower": preds * 0.9,
+                    "SalePrice_Upper": preds * 1.1,
                     "Neighborhood": rng.choice(
                         ["NAmes", "CollgCr", "OldTown", "Edwards", "Somerst"],
                         size=n_samples,
@@ -66,12 +66,7 @@ budget = st.sidebar.slider(
     step=100_000,
 )
 
-theta = (
-    st.sidebar.slider(
-        "Max Downside Conformal Risk (%)", min_value=1, max_value=30, value=10, step=1
-    )
-    / 100.0
-)
+theta = st.sidebar.slider("Max Downside Conformal Risk (%)", min_value=1, max_value=30, value=10, step=1) / 100.0
 
 opt_mode = st.sidebar.radio(
     "Optimization Mode",
@@ -88,9 +83,7 @@ with st.spinner("Optimizing Portfolio..."):
         res_df = solve_pyomo(df.copy(), budget, theta, fractional_mode)
         solver_used = "Pyomo (glpk/cbc)"
     except Exception as e:  # noqa: BLE001
-        st.sidebar.warning(
-            f"Pyomo failed/unavailable. Using Vectorized Greedy Heuristic. Error: {e}"
-        )
+        st.sidebar.warning(f"Pyomo failed/unavailable. Using Vectorized Greedy Heuristic. Error: {e}")
         res_df = solve_greedy(df.copy(), budget, theta)
         solver_used = "Vectorized Greedy Heuristic"
 
@@ -101,9 +94,7 @@ selected_df = res_df[res_df["Selected_Fraction"] > 0.001].copy()
 
 total_spend = (selected_df["Asking_Price"] * selected_df["Selected_Fraction"]).sum()
 total_profit = (selected_df["Expected_Profit"] * selected_df["Selected_Fraction"]).sum()
-total_downside = (
-    selected_df["Conformal_Downside"] * selected_df["Selected_Fraction"]
-).sum()
+total_downside = (selected_df["Conformal_Downside"] * selected_df["Selected_Fraction"]).sum()
 
 # ============================================
 # METRICS DASHBOARD
@@ -125,9 +116,7 @@ col4.metric(
 # ============================================
 # VISUALIZATION TABS
 # ============================================
-tab1, tab2, tab3 = st.tabs(
-    ["Conformal Pricing Envelopes", "Risk-Return Frontier", "Selected Properties"]
-)
+tab1, tab2, tab3 = st.tabs(["Conformal Pricing Envelopes", "Risk-Return Frontier", "Selected Properties"])
 
 with tab1:
     st.subheader("Asset Valuation with 95% Conformal Limits")
@@ -141,7 +130,7 @@ with tab1:
     fig1.add_trace(
         go.Scatter(
             x=viz_df.index,
-            y=viz_df["Price_Upper_Bound"],
+            y=viz_df["SalePrice_Upper"],
             mode="lines",
             line={"width": 0},
             showlegend=False,
@@ -153,7 +142,7 @@ with tab1:
     fig1.add_trace(
         go.Scatter(
             x=viz_df.index,
-            y=viz_df["Price_Lower_Bound"],
+            y=viz_df["SalePrice_Lower"],
             mode="lines",
             line={"width": 0},
             fill="tonexty",
@@ -185,9 +174,7 @@ with tab1:
         )
     )
 
-    fig1.update_layout(
-        xaxis_title="Properties (Sorted by Predicted Price)", yaxis_title="Price ($USD)"
-    )
+    fig1.update_layout(xaxis_title="Properties (Sorted by Predicted Price)", yaxis_title="Price ($USD)")
     st.plotly_chart(fig1, use_container_width=True)
 
 with tab2:
@@ -204,9 +191,7 @@ with tab2:
         opacity=0.6,
     )
 
-    fig2.update_layout(
-        xaxis_title="Conformal Downside Risk ($)", yaxis_title="Expected Profit ($)"
-    )
+    fig2.update_layout(xaxis_title="Conformal Downside Risk ($)", yaxis_title="Expected Profit ($)")
     st.plotly_chart(fig2, use_container_width=True)
 
 with tab3:

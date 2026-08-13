@@ -1,7 +1,10 @@
 import os
 
 import joblib
+import lightgbm as lgb
+import numpy as np
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
 # ============================================
 # LOAD MODELS AND DATA
@@ -11,57 +14,31 @@ print("LOADING MODELS AND DATA")
 print("=" * 60)
 
 # Load test data
-import numpy as np
 
 X_test = pd.read_csv("./processed_data/X_test.csv")
 X_test_raw = pd.read_csv("./processed_data/X_test_raw.csv")
 test_ids = pd.read_csv("./data/test.csv")["Id"]
 
 raw_train = pd.read_csv("./data/train.csv")
-raw_train = raw_train[
-    ~((raw_train["GrLivArea"] > 4000) & (raw_train["SalePrice"] < 200000))
-].reset_index(drop=True)
+raw_train = raw_train[~((raw_train["GrLivArea"] > 4000) & (raw_train["SalePrice"] < 200000))].reset_index(drop=True)
 raw_test_neighborhoods = pd.read_csv("./data/test.csv")["Neighborhood"]
 
-raw_train["TotalSF"] = (
-    raw_train["TotalBsmtSF"] + raw_train["1stFlrSF"] + raw_train["2ndFlrSF"]
-)
+raw_train["TotalSF"] = raw_train["TotalBsmtSF"] + raw_train["1stFlrSF"] + raw_train["2ndFlrSF"]
 raw_train["PricePerSF"] = raw_train["SalePrice"] / raw_train["TotalSF"]
-neigh_order = (
-    raw_train.groupby("Neighborhood")["PricePerSF"].median().sort_values().index
-)
+neigh_order = raw_train.groupby("Neighborhood")["PricePerSF"].median().sort_values().index
 neigh_map = {n: i + 1 for i, n in enumerate(neigh_order)}
 
 X_test["Neighborhood"] = raw_test_neighborhoods.map(neigh_map).fillna(13).astype(int)
-X_test_raw["Neighborhood"] = (
-    raw_test_neighborhoods.map(neigh_map).fillna(13).astype(int)
-)
+X_test_raw["Neighborhood"] = raw_test_neighborhoods.map(neigh_map).fillna(13).astype(int)
 
 # Load trained models (we only use the best ones)
 xgb_model = joblib.load("./models/xgboost_best_rmsle.pkl")
 catboost_model = joblib.load("./models/catboost_best_rmsle.pkl")
-import lightgbm as lgb
 
-lgb_model = (
-    lgb.Booster(model_file="./models/lightgbm_best.txt")
-    if os.path.exists("./models/lightgbm_best.txt")
-    else None
-)
-ridge_model = (
-    joblib.load("./models/oof_ridge.pkl")
-    if os.path.exists("./models/oof_ridge.pkl")
-    else None
-)
-lasso_model = (
-    joblib.load("./models/oof_lasso.pkl")
-    if os.path.exists("./models/oof_lasso.pkl")
-    else None
-)
-elasticnet_model = (
-    joblib.load("./models/oof_elasticnet.pkl")
-    if os.path.exists("./models/oof_elasticnet.pkl")
-    else None
-)
+lgb_model = lgb.Booster(model_file="./models/lightgbm_best.txt") if os.path.exists("./models/lightgbm_best.txt") else None
+ridge_model = joblib.load("./models/oof_ridge.pkl") if os.path.exists("./models/oof_ridge.pkl") else None
+lasso_model = joblib.load("./models/oof_lasso.pkl") if os.path.exists("./models/oof_lasso.pkl") else None
+elasticnet_model = joblib.load("./models/oof_elasticnet.pkl") if os.path.exists("./models/oof_elasticnet.pkl") else None
 
 # Load the transformer (Box-Cox)
 print("✅ Models loaded successfully.")
@@ -111,9 +88,7 @@ try:
 except NameError:
     # Normalize weights to sum to 1.0
     total = weight_xgb + weight_catboost
-    ensemble_pred = (weight_xgb / total) * xgb_pred_original + (
-        weight_catboost / total
-    ) * catboost_pred_original
+    ensemble_pred = (weight_xgb / total) * xgb_pred_original + (weight_catboost / total) * catboost_pred_original
 
 ensemble_pred = np.clip(ensemble_pred, 42000, 525000)
 
@@ -126,26 +101,17 @@ print("\n" + "=" * 60)
 print("CALCULATING CONFORMAL PREDICTION INTERVALS")
 print("=" * 60)
 
-from sklearn.model_selection import train_test_split
 
 X_train = pd.read_csv("./processed_data/X_train.csv")
 X_train_raw = pd.read_csv("./processed_data/X_train_raw.csv")
 y_train_log = pd.read_csv("./processed_data/y_train_log.csv").squeeze()
 
-X_train["Neighborhood"] = (
-    raw_train["Neighborhood"].map(neigh_map).fillna(13).astype(int)
-)
-X_train_raw["Neighborhood"] = (
-    raw_train["Neighborhood"].map(neigh_map).fillna(13).astype(int)
-)
+X_train["Neighborhood"] = raw_train["Neighborhood"].map(neigh_map).fillna(13).astype(int)
+X_train_raw["Neighborhood"] = raw_train["Neighborhood"].map(neigh_map).fillna(13).astype(int)
 
 # Recreate 10% calibration set split
-_, X_cal, _, y_cal_log = train_test_split(
-    X_train, y_train_log, test_size=0.1, random_state=42
-)
-_, X_cal_raw, _, _ = train_test_split(
-    X_train_raw, y_train_log, test_size=0.1, random_state=42
-)
+_, X_cal, _, y_cal_log = train_test_split(X_train, y_train_log, test_size=0.1, random_state=42)
+_, X_cal_raw, _, _ = train_test_split(X_train_raw, y_train_log, test_size=0.1, random_state=42)
 
 # Generate ensemble predictions on calibration set
 xgb_cal_transformed = xgb_model.predict(X_cal)
@@ -158,9 +124,7 @@ except Exception:  # noqa: BLE001
 # Load OOF predictions directly from models directory for linear models since they are already saved
 try:
     oof_ridge = __import__("joblib").load("./models/oof_ridge.pkl")
-    ridge_cal_transformed = oof_ridge[
-        -len(X_cal) :
-    ]  # Approximation for calibration split
+    ridge_cal_transformed = oof_ridge[-len(X_cal) :]  # Approximation for calibration split
 except Exception:  # noqa: BLE001
     ridge_cal_transformed = np.zeros(len(X_cal))
 
@@ -236,12 +200,11 @@ submission_intervals = pd.DataFrame(
     {
         "Id": test_ids,
         "SalePrice": ensemble_pred,
-        "Price_Lower_Bound": lower_bounds,
-        "Price_Upper_Bound": upper_bounds,
+        "SalePrice_Lower": lower_bounds,
+        "SalePrice_Upper": upper_bounds,
     }
 )
 
-import os
 
 os.makedirs("./submissions", exist_ok=True)
 

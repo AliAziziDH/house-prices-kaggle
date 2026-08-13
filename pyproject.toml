@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "house-prices-kaggle"
+version = "1.1.0"
+description = "Ames Housing Decision Intelligence Pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Dependencies are consolidated in requirements.txt
+]
+
+[tool.ruff]
+line-length = 125
+target-version = "py312"
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = []
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q"
+testpaths = ["tests"]
+pythonpath = ["src", "."]

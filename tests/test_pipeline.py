@@ -29,12 +29,8 @@ def test_preprocessing_transforms():
     processed_df = preprocess_data(mock_data, is_training=True)
 
     # Assert that ordinal quality map successfully mapped string values to numeric types
-    assert pd.api.types.is_numeric_dtype(processed_df["ExterQual"]), (
-        "ExterQual was not converted to a numeric type!"
-    )
-    assert pd.api.types.is_numeric_dtype(processed_df["KitchenQual"]), (
-        "KitchenQual was not converted to a numeric type!"
-    )
+    assert pd.api.types.is_numeric_dtype(processed_df["ExterQual"]), "ExterQual was not converted to a numeric type!"
+    assert pd.api.types.is_numeric_dtype(processed_df["KitchenQual"]), "KitchenQual was not converted to a numeric type!"
     assert processed_df["ExterQual"].iloc[0] == 5
     assert processed_df["ExterQual"].iloc[1] == 3
 
