@@ -86,3 +86,50 @@ def test_conformal_intervals():
         assert (df["SalePrice_Lower"] >= 42000.0).all()
         # Upper bound clamped to max $525000
         assert (df["SalePrice_Upper"] <= 525000.0).all()
+
+
+def test_pyomo_portfolio_solver():
+    """
+    Test the Pyomo MILP portfolio solver to ensure budget and conformal risk constraints
+    are strictly satisfied with fractional_mode=False.
+    """
+    from src.portfolio_solver import solve_pyomo
+
+    # Create mock test data
+    mock_data = pd.DataFrame(
+        {
+            "Id": [101, 102, 103, 104, 105],
+            "SalePrice_pred": [200000, 250000, 150000, 300000, 180000],
+            "SalePrice_Lower": [180000, 210000, 140000, 270000, 160000],
+            "SalePrice_Upper": [220000, 290000, 160000, 330000, 200000],
+        }
+    )
+
+    # Generate asking prices: 90% of predicted price
+    mock_data["Asking_Price"] = mock_data["SalePrice_pred"] * 0.90
+
+    budget = 400000
+    theta = 0.15  # 15% max downside risk
+
+    # Run pyomo solver with binary decision variables (fractional_mode=False)
+    res_df = solve_pyomo(mock_data.copy(), budget=budget, theta=theta, fractional_mode=False)
+
+    # Assert output has the required columns
+    assert "Selected_Fraction" in res_df.columns
+    assert "Expected_Profit" in res_df.columns
+    assert "Conformal_Downside" in res_df.columns
+
+    # Filter selected properties
+    selected = res_df[res_df["Selected_Fraction"] > 0.5]
+
+    # 1. Binary check
+    assert res_df["Selected_Fraction"].isin([0.0, 1.0]).all()
+
+    # 2. Budget constraint check
+    total_spend = selected["Asking_Price"].sum()
+    assert total_spend <= budget
+
+    # 3. Conformal downside risk check
+    total_risk = selected["Conformal_Downside"].sum()
+    # allow for a tiny floating point tolerance
+    assert total_risk <= (theta * total_spend) + 1e-6

@@ -25,7 +25,7 @@ house-prices-kaggle/
 │   ├── train_catboost.py            # Highly regularized CatBoost regressor
 │   ├── find_ensemble_weights.py     # SLSQP convex optimization solver
 │   ├── ensemble.py                  # Predict pipeline and Conformal Calibration
-│   └── portfolio_dashboard.py       # Streamlit UI & interactive visualization
+│   └── ui/app.py       # Streamlit UI & interactive visualization
 ├── tests/                           # Verification Suite
 │   └── test_pipeline.py             # Pytest automated test scripts
 ├── requirements.txt                 # Project dependencies
