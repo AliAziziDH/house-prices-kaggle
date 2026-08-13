@@ -24,10 +24,10 @@ make_submissions:
 	python src/ensemble.py
 
 dashboard:
-	streamlit run src/portfolio_dashboard.py
+	streamlit run src/ui/app.py
 
 recommend_portfolio:
-	python src/recommend_portfolio.py
+	python src/portfolio_solver.py
 
 clean:
 	rm -rf processed_data/* models/* submissions/* experiments/archive/*

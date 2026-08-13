@@ -4,7 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.recommend_portfolio import solve_greedy, solve_pyomo
+from src.portfolio_solver import solve_pyomo
+from src.portfolio_utils import solve_greedy
 
 # ============================================
 # PAGE CONFIGURATION
