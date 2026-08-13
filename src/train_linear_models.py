@@ -25,14 +25,15 @@ def main():
     print("=" * 60)
 
     # 100% data
-    X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
+    X_train_full = pd.read_csv("./processed_data/X_train_full_linear.csv")
     y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
 
     # 90% data
-    X_train_90 = pd.read_csv("./processed_data/X_train.csv")
+    X_train_90 = pd.read_csv("./processed_data/X_train_linear.csv")
     y_train_90 = pd.read_csv("./processed_data/y_train.csv").squeeze()
 
-    pd.read_csv("./processed_data/X_test.csv")
+    X_test_linear = pd.read_csv("./processed_data/X_test_linear.csv")
+    test_neighborhoods = pd.read_csv("./processed_data/X_test_raw.csv")["Neighborhood"]
 
     raw_train = pd.read_csv("./data/train.csv")
     raw_train = raw_train[~((raw_train["GrLivArea"] > 4000) & (raw_train["SalePrice"] < 200000))].reset_index(drop=True)
@@ -186,6 +187,32 @@ def main():
         inverse_func=np.expm1,
     )
     model_elasticnet_90.fit(X_train_90_enc, y_train_90)
+
+    # Save test encodings
+    X_test_linear_encoded = X_test_linear.copy()
+    test_encodings = []
+    for n in test_neighborhoods:
+        sum_c = neigh_sums_full.get(n, 0)
+        n_c = neigh_counts_full.get(n, 0)
+        enc = (sum_c + m * global_mean_full) / (n_c + m) if (n_c + m) > 0 else global_mean_full
+        test_encodings.append(enc)
+    X_test_linear_encoded["Neighborhood"] = test_encodings
+
+    X_calib_linear = pd.read_csv("./processed_data/X_calib_linear.csv")
+    calib_neighborhoods = pd.read_csv("./processed_data/X_calib_raw.csv")["Neighborhood"]
+
+    X_calib_linear_encoded = X_calib_linear.copy()
+    calib_encodings = []
+    for n in calib_neighborhoods:
+        sum_c = neigh_sums_90.get(n, 0)
+        n_c = neigh_counts_90.get(n, 0)
+        enc = (sum_c + m * global_mean_90) / (n_c + m) if (n_c + m) > 0 else global_mean_90
+        calib_encodings.append(enc)
+    X_calib_linear_encoded["Neighborhood"] = calib_encodings
+
+    X_test_linear_encoded.to_csv("./processed_data/X_test_linear.csv", index=False)
+    X_calib_linear_encoded.to_csv("./processed_data/X_calib_linear.csv", index=False)
+
 
     from src.metrics import rmsle
 

@@ -13,6 +13,7 @@ if __name__ == '__main__':
         ["python", "src/preprocess.py"],
         ["python", "src/optimize_xgboost.py"],
         ["python", "src/train_catboost.py"],
+        ["python", "src/train_linear_models.py"],
         ["python", "src/find_ensemble_weights.py"],
         ["python", "src/ensemble.py"],
         ["python", "src/portfolio_solver.py"]
