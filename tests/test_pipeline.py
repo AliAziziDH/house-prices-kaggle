@@ -83,8 +83,10 @@ def test_conformal_intervals():
     if os.path.exists("./submissions/submission_with_intervals.csv"):
         df = pd.read_csv("./submissions/submission_with_intervals.csv")
         # Lower bound < Point < Upper bound
-        assert (df["SalePrice_Lower"] < df["SalePrice"]).all()
-        assert (df["SalePrice"] < df["SalePrice_Upper"]).all()
+        assert (df["SalePrice_Lower"] <= df["SalePrice"]).all()
+        assert (df["SalePrice"] <= df["SalePrice_Upper"]).all()
 
         # Lower bound clamped to min $42000
         assert (df["SalePrice_Lower"] >= 42000.0).all()
+        # Upper bound clamped to max $525000
+        assert (df["SalePrice_Upper"] <= 525000.0).all()

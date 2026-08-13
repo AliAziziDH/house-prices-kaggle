@@ -1,3 +1,4 @@
+main_code = """
 import json
 import os
 
@@ -31,7 +32,6 @@ best_params_cat = {
     "verbose": False,
 }
 
-
 def main():
     print("=" * 60)
     print("LOADING FULL DATA FOR ENSEMBLE SLSQP")
@@ -55,12 +55,10 @@ def main():
 
     # We need PowerTransformer to box-cox transform the targets locally for the OOF fit
     from sklearn.preprocessing import PowerTransformer
-
     pt = PowerTransformer(method="box-cox")
     y_full_transformed = pt.fit_transform(y_train_full.values.reshape(-1, 1)).flatten()
 
     import joblib
-
     cat_features = joblib.load("./models/cat_features.pkl")
 
     for fold, (train_idx, val_idx) in enumerate(kf.split(X_train_full)):
@@ -82,22 +80,13 @@ def main():
         xgb_fold = clone(xgb_base)
         xgb_fold.fit(X_train_fold_xgb, y_train_fold_trans)
         y_pred_xgb_trans = xgb_fold.predict(X_val_fold_xgb)
-        xgb_oof[val_idx] = pt.inverse_transform(
-            y_pred_xgb_trans.reshape(-1, 1)
-        ).flatten()
+        xgb_oof[val_idx] = pt.inverse_transform(y_pred_xgb_trans.reshape(-1, 1)).flatten()
 
         # CatBoost
         cat_fold = clone(cat_base)
-        cat_fold.fit(
-            X_train_fold_cat,
-            y_train_fold_trans,
-            cat_features=cat_features,
-            verbose=False,
-        )
+        cat_fold.fit(X_train_fold_cat, y_train_fold_trans, cat_features=cat_features, verbose=False)
         y_pred_cat_trans = cat_fold.predict(X_val_fold_cat)
-        cat_oof[val_idx] = pt.inverse_transform(
-            y_pred_cat_trans.reshape(-1, 1)
-        ).flatten()
+        cat_oof[val_idx] = pt.inverse_transform(y_pred_cat_trans.reshape(-1, 1)).flatten()
 
     y_true_orig = y_train_full.values
     xgb_oof_orig = xgb_oof
@@ -146,6 +135,8 @@ def main():
         json.dump(weight_dict, f, indent=4)
     print("✅ Saved optimal weights to models/ensemble_weights.json")
 
-
 if __name__ == "__main__":
     main()
+"""
+with open('src/find_ensemble_weights.py', 'w') as f:
+    f.write(main_code)
