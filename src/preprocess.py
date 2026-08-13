@@ -12,11 +12,12 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
     and applies them without data leakage during transform.
     """
 
-    def __init__(self):
+    def __init__(self, vif_prune=False):
         self.lot_frontage_neighborhood_medians_ = {}
         self.lot_frontage_global_median_ = 0.0
         self.categorical_modes_ = {}
         self.feature_columns_ = []
+        self.vif_prune = vif_prune
 
     def fit(self, X, y=None):
         X = X.copy()
@@ -117,24 +118,23 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
                 df[col] = df[col].fillna(0)
 
         # 7. Feature engineering
-        if all(c in df.columns for c in ["TotalBsmtSF", "1stFlrSF", "2ndFlrSF"]):
-            df["TotalSF"] = df["TotalBsmtSF"] + df["1stFlrSF"] + df["2ndFlrSF"]
+        if all(c in df.columns for c in ["GrLivArea", "TotalBsmtSF"]):
+            df["TotalSF"] = df["GrLivArea"] + df["TotalBsmtSF"]
 
-        if all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
+        if all(c in df.columns for c in ["WoodDeckSF", "OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
+            df["TotalPorchSF"] = df["WoodDeckSF"] + df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
+        elif all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
             df["TotalPorchSF"] = df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
 
         if all(c in df.columns for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]):
-            df["TotalBathrooms"] = df["FullBath"] + 0.5 * df["HalfBath"] + df["BsmtFullBath"] + 0.5 * df["BsmtHalfBath"]
+            df["Total_Bathrooms"] = df["FullBath"] + 0.5 * df["HalfBath"] + df["BsmtFullBath"] + 0.5 * df["BsmtHalfBath"]
 
         if all(c in df.columns for c in ["YrSold", "YearBuilt"]):
             df["HouseAge"] = df["YrSold"] - df["YearBuilt"]
-            df["IsNew"] = (df["YearBuilt"] == df["YrSold"]).astype(int)
+            df["IsNew"] = (df["YrSold"] == df["YearBuilt"]).astype(int)
 
         if all(c in df.columns for c in ["YrSold", "YearRemodAdd"]):
             df["RemodAge"] = df["YrSold"] - df["YearRemodAdd"]
-
-        if all(c in df.columns for c in ["OverallQual", "OverallCond"]):
-            df["QualityScore"] = df["OverallQual"] * df["OverallCond"]
 
         if all(c in df.columns for c in ["YrSold", "GarageYrBlt"]):
             df["GarageAge"] = np.where(df["GarageYrBlt"] == 0, 0, df["YrSold"] - df["GarageYrBlt"])
@@ -190,8 +190,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             df = pd.get_dummies(df, columns=nominal_cols, drop_first=True)
 
         # 10. VIF Enforcer: Drop highly collinear features
-        vif_drops = ["GarageArea", "TotRmsAbvGrd", "1stFlrSF"]
-        df = df.drop(columns=[col for col in vif_drops if col in df.columns])
+        if self.vif_prune:
+            vif_drops = ["GarageArea", "TotRmsAbvGrd", "1stFlrSF"]
+            df = df.drop(columns=[col for col in vif_drops if col in df.columns])
 
         return df
 
@@ -202,11 +203,11 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         return X_trans
 
 
-def preprocess_data(df, is_training=True):
+def preprocess_data(df, is_training=True, vif_prune=False):
     """
     Backward-compatible preprocessing function using stateful AmesDataTransformer.
     """
-    transformer = AmesDataTransformer()
+    transformer = AmesDataTransformer(vif_prune=vif_prune)
     if "SalePrice" in df.columns:
         y = df["SalePrice"]
         X = df.drop(columns=["SalePrice"])
@@ -255,24 +256,34 @@ if __name__ == "__main__":
 
     X_test_df = test.drop(["Id"], axis=1)
 
-    # 100% data transformer
-    transformer_full = AmesDataTransformer()
+    # 100% data transformer (Without VIF Pruning for Trees)
+    transformer_full = AmesDataTransformer(vif_prune=False)
     transformer_full.fit(X_train_full_df, y_train_full)
     X_train_full = transformer_full.transform(X_train_full_df)
 
-    # 90% data transformer
-    transformer = AmesDataTransformer()
+    # 100% data transformer (With VIF Pruning for Linear Models)
+    transformer_full_linear = AmesDataTransformer(vif_prune=True)
+    transformer_full_linear.fit(X_train_full_df, y_train_full)
+    X_train_full_linear = transformer_full_linear.transform(X_train_full_df)
+
+    # 90% data transformer (Without VIF Pruning)
+    transformer = AmesDataTransformer(vif_prune=False)
     # Fit ONLY on proper train for 90/10 models and test predictions
     transformer.fit(X_train_df, y_train)
 
     X_train = transformer.transform(X_train_df)
     X_calib = transformer.transform(X_calib_df)
 
+    # 90% data transformer (With VIF Pruning)
+    transformer_linear = AmesDataTransformer(vif_prune=True)
+    transformer_linear.fit(X_train_df, y_train)
+
+    X_train_linear = transformer_linear.transform(X_train_df)
+    X_calib_linear = transformer_linear.transform(X_calib_df)
+
     # We predict the test set using the 100% data transformer for final point prediction
-    # Wait, the 90% models will need test predictions?
-    # Actually, 90% models only need to predict on X_calib to find the quantile.
-    # The final predictions use 100% models predicting on X_test transformed by transformer_full.
     X_test = transformer_full.transform(X_test_df)
+    X_test_linear = transformer_full_linear.transform(X_test_df)
 
     import os
 
@@ -281,17 +292,21 @@ if __name__ == "__main__":
 
     # save full datasets
     X_train_full.to_csv("./processed_data/X_train_full.csv", index=False)
+    X_train_full_linear.to_csv("./processed_data/X_train_full_linear.csv", index=False)
     y_train_full.to_csv("./processed_data/y_train_full.csv", index=False)
     train_full.drop("SalePrice", axis=1).to_csv("./processed_data/X_train_full_raw.csv", index=False)
 
     # save 90% and 10%
     X_train.to_csv("./processed_data/X_train.csv", index=False)
+    X_train_linear.to_csv("./processed_data/X_train_linear.csv", index=False)
     y_train.to_csv("./processed_data/y_train.csv", index=False)
 
     X_calib.to_csv("./processed_data/X_calib.csv", index=False)
+    X_calib_linear.to_csv("./processed_data/X_calib_linear.csv", index=False)
     y_calib.to_csv("./processed_data/y_calib.csv", index=False)
 
     X_test.to_csv("./processed_data/X_test.csv", index=False)
+    X_test_linear.to_csv("./processed_data/X_test_linear.csv", index=False)
 
     train_proper.drop("SalePrice", axis=1).to_csv("./processed_data/X_train_raw.csv", index=False)
     calib_set.drop("SalePrice", axis=1).to_csv("./processed_data/X_calib_raw.csv", index=False)

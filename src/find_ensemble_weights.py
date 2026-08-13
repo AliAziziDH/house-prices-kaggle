@@ -106,19 +106,23 @@ def main():
             cat_fold.fit(X_train_fold_cat, y_train_fold_trans, cat_features=cat_features, verbose=False)
             cat_oof[val_idx] = cat_fold.predict(X_val_fold_cat)
 
+        # Save OOF predictions to disk so they can be reused
+        # We save them as dollars for consistency with linear models
+        train_df = pd.read_csv("./data/train.csv")
+        outlier_mask = (train_df["GrLivArea"] > 4000) & (train_df["SalePrice"] < 200000)
+        train_full_ids = train_df[~outlier_mask]["Id"]
+
+        xgb_df = pd.DataFrame({"Id": train_full_ids, "OOF_SalePrice": np.expm1(xgb_oof)})
+        cat_df = pd.DataFrame({"Id": train_full_ids, "OOF_SalePrice": np.expm1(cat_oof)})
+        xgb_df.to_csv(oof_xgb_path, index=False)
+        cat_df.to_csv(oof_cat_path, index=False)
+
     print("Loading pre-calculated OOF predictions for remaining models...")
-    oof_lasso_phys = pd.read_csv("./processed_data/oof_lasso.csv").squeeze().values
     oof_ridge_phys = pd.read_csv("./processed_data/oof_ridge.csv").squeeze().values
-    oof_elasticnet_phys = pd.read_csv("./processed_data/oof_elasticnet.csv").squeeze().values
-    oof_lightgbm_phys = pd.read_csv("./processed_data/oof_lightgbm.csv").squeeze().values
-
-    oof_lasso = np.log1p(np.clip(oof_lasso_phys, 1, None))
     oof_ridge = np.log1p(np.clip(oof_ridge_phys, 1, None))
-    oof_elasticnet = np.log1p(np.clip(oof_elasticnet_phys, 1, None))
-    oof_lightgbm = np.log1p(np.clip(oof_lightgbm_phys, 1, None))
 
-    preds = np.column_stack([xgb_oof, cat_oof, oof_lightgbm, oof_lasso, oof_ridge, oof_elasticnet])
-    model_names = ["xgb", "catboost", "lightgbm", "lasso", "ridge", "elasticnet"]
+    preds = np.column_stack([xgb_oof, cat_oof, oof_ridge])
+    model_names = ["xgb", "catboost", "ridge"]
 
     errors = np.zeros_like(preds)
     for j in range(preds.shape[1]):
