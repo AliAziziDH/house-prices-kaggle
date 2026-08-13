@@ -1,5 +1,13 @@
-import os
+import re
 
+with open('src/optimize_xgboost.py', 'r') as f:
+    content = f.read()
+
+# We want optimize_xgboost.py to train on FULL data to get optimal params,
+# then fit a best_model on 100% data, and another model on 90% data.
+
+main_code = """
+import os
 import joblib
 import numpy as np
 import optuna
@@ -50,24 +58,15 @@ def objective(trial):
 
     # We optimize on the full data
     for train_idx, val_idx in kf.split(X_train_full):
-        X_train_fold, X_val_fold = (
-            X_train_full.iloc[train_idx],
-            X_train_full.iloc[val_idx],
-        )
-        y_train_fold, y_val_fold = (
-            y_full_transformed[train_idx],
-            y_full_transformed[val_idx],
-        )
+        X_train_fold, X_val_fold = X_train_full.iloc[train_idx], X_train_full.iloc[val_idx]
+        y_train_fold, y_val_fold = y_full_transformed[train_idx], y_full_transformed[val_idx]
         model.fit(X_train_fold, y_train_fold)
         y_pred_transformed = model.predict(X_val_fold)
-        y_pred_original = pt_full.inverse_transform(
-            y_pred_transformed.reshape(-1, 1)
-        ).flatten()
+        y_pred_original = pt_full.inverse_transform(y_pred_transformed.reshape(-1, 1)).flatten()
         y_val_original = pt_full.inverse_transform(y_val_fold.reshape(-1, 1)).flatten()
         rmsle_score = rmsle(y_val_original, y_pred_original)
         rmsle_scores.append(rmsle_score)
     return np.mean(rmsle_scores)
-
 
 def main():
     os.makedirs("./experiments", exist_ok=True)
@@ -83,22 +82,19 @@ def main():
     study.optimize(objective, n_trials=N_TRIALS)
 
     best_params = study.best_params
+    best_params_no_rs = {k: v for k, v in best_params.items() if k != "random_state"}
 
     final_params = best_params.copy()
-    final_params.update(
-        {
-            "n_estimators": 2000,
-            "random_state": RANDOM_STATE,
-            "verbosity": 0,
-            "early_stopping_rounds": 50,
-        }
-    )
+    final_params.update({
+        "n_estimators": 2000,
+        "random_state": RANDOM_STATE,
+        "verbosity": 0,
+        "early_stopping_rounds": 50,
+    })
 
     # --- TRAIN 100% MODEL ---
-    print("\nTRAINING 100% XGBOOST MODEL")
-    tr_idx, val_idx = train_test_split(
-        np.arange(len(X_train_full)), test_size=0.1, random_state=RANDOM_STATE
-    )
+    print("\\nTRAINING 100% XGBOOST MODEL")
+    tr_idx, val_idx = train_test_split(np.arange(len(X_train_full)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr = X_train_full.iloc[tr_idx].copy()
     X_val = X_train_full.iloc[val_idx].copy()
     y_tr = y_full_transformed[tr_idx]
@@ -111,11 +107,10 @@ def main():
     joblib.dump(best_model_full, "./models/xgboost_best_rmsle.pkl")
     joblib.dump(pt_full, "./models/boxcox_transformer.pkl")
 
+
     # --- TRAIN 90% MODEL ---
-    print("\nTRAINING 90% XGBOOST MODEL")
-    tr_idx_90, val_idx_90 = train_test_split(
-        np.arange(len(X_train_90)), test_size=0.1, random_state=RANDOM_STATE
-    )
+    print("\\nTRAINING 90% XGBOOST MODEL")
+    tr_idx_90, val_idx_90 = train_test_split(np.arange(len(X_train_90)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr_90 = X_train_90.iloc[tr_idx_90].copy()
     X_val_90 = X_train_90.iloc[val_idx_90].copy()
     y_tr_90 = y_90_transformed[tr_idx_90]
@@ -130,6 +125,9 @@ def main():
     trials_df = study.trials_dataframe()
     trials_df.to_csv("./experiments/xgboost_trials_log.csv", index=False)
 
-
 if __name__ == "__main__":
     main()
+"""
+
+with open('src/optimize_xgboost.py', 'w') as f:
+    f.write(main_code)
