@@ -29,7 +29,9 @@ def main():
     # ============================================
     print("Making predictions...")
     xgb_pred = xgb_model.predict(X_test)
-    catboost_pred = catboost_model.predict(X_test)  # Using the same one-hot encoded data
+    catboost_pred = catboost_model.predict(
+        X_test
+    )  # Using the same one-hot encoded data
 
     # Inverse transform to original scale
     xgb_pred_orig = pt.inverse_transform(xgb_pred.reshape(-1, 1)).flatten()
@@ -46,7 +48,9 @@ def main():
             weight_catboost = weights.get("catboost", 0.36)
         print("✅ Loaded optimal weights from models/ensemble_weights.json")
     except FileNotFoundError:
-        print("⚠️ models/ensemble_weights.json not found, falling back to baseline weights.")
+        print(
+            "⚠️ models/ensemble_weights.json not found, falling back to baseline weights."
+        )
         weight_xgb = 0.64
         weight_catboost = 0.36
 
@@ -69,5 +73,6 @@ def main():
     print("   First 5 rows:")
     print(submission.head())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

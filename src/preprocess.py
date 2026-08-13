@@ -252,26 +252,57 @@ if __name__ == "__main__":
     train = pd.read_csv("./data/train.csv")
     test = pd.read_csv("./data/test.csv")
 
-    print(f"Train shape: {train.shape}")
+    # --- OUTLIER REMOVAL (BEFORE SPLIT) ---
+    outlier_mask = (train["GrLivArea"] > 4000) & (train["SalePrice"] < 200000)
+    train = train[~outlier_mask].reset_index(drop=True)
+
+    print(f"Train shape after outlier removal: {train.shape}")
     print(f"Test shape: {test.shape}")
 
-    y_train = train["SalePrice"]
-    X_train_df = train.drop(["Id", "SalePrice"], axis=1)
+    # --- 90/10 SPLIT ---
+    from sklearn.model_selection import train_test_split
+
+    train_proper, calib_set = train_test_split(train, test_size=0.1, random_state=42)
+
+    train_proper = train_proper.reset_index(drop=True)
+    calib_set = calib_set.reset_index(drop=True)
+
+    print(f"Proper Train shape: {train_proper.shape}")
+    print(f"Calibration shape: {calib_set.shape}")
+
+    y_train = train_proper["SalePrice"]
+    X_train_df = train_proper.drop(["Id", "SalePrice"], axis=1)
+
+    y_calib = calib_set["SalePrice"]
+    X_calib_df = calib_set.drop(["Id", "SalePrice"], axis=1)
+
     X_test_df = test.drop(["Id"], axis=1)
 
     transformer = AmesDataTransformer()
+    # Fit ONLY on proper train
     transformer.fit(X_train_df, y_train)
 
     X_train = transformer.transform(X_train_df)
+    X_calib = transformer.transform(X_calib_df)
     X_test = transformer.transform(X_test_df)
+
+    import os
 
     os.makedirs("./processed_data", exist_ok=True)
     X_train.to_csv("./processed_data/X_train.csv", index=False)
-    X_test.to_csv("./processed_data/X_test.csv", index=False)
     y_train.to_csv("./processed_data/y_train.csv", index=False)
 
+    X_calib.to_csv("./processed_data/X_calib.csv", index=False)
+    y_calib.to_csv("./processed_data/y_calib.csv", index=False)
+
+    X_test.to_csv("./processed_data/X_test.csv", index=False)
+
+    train_proper.drop("SalePrice", axis=1).to_csv(
+        "./processed_data/X_train_raw.csv", index=False
+    )
+    calib_set.drop("SalePrice", axis=1).to_csv(
+        "./processed_data/X_calib_raw.csv", index=False
+    )
+    test.to_csv("./processed_data/X_test_raw.csv", index=False)
+
     print("✅ Processed data saved successfully.")
-    print(f"   X_train: {X_train.shape}")
-    print(f"   X_test: {X_test.shape}")
-    print(f"   y_train: {y_train.shape}")
-    print("\n✅ Preprocessing completed successfully.")
