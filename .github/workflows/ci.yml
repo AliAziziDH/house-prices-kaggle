@@ -26,9 +26,10 @@ jobs:
       run: |
         uv pip install --system -r requirements.txt
 
-    - name: Run Ruff Linter
-      run: |
-        python3 -m ruff check src/
+     - name: Run Ruff Linter
+      uses: astral-sh/ruff-action@v3
+      with:
+        src: "./src"
 
     - name: Execute Pytest Suite
       run: |
