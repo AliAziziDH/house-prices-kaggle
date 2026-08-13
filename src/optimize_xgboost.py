@@ -60,9 +60,7 @@ def objective(trial):
         )
         model.fit(X_train_fold, y_train_fold)
         y_pred_transformed = model.predict(X_val_fold)
-        y_pred_original = pt_full.inverse_transform(
-            y_pred_transformed.reshape(-1, 1)
-        ).flatten()
+        y_pred_original = pt_full.inverse_transform(y_pred_transformed.reshape(-1, 1)).flatten()
         y_val_original = pt_full.inverse_transform(y_val_fold.reshape(-1, 1)).flatten()
         rmsle_score = rmsle(y_val_original, y_pred_original)
         rmsle_scores.append(rmsle_score)
@@ -96,9 +94,7 @@ def main():
 
     # --- TRAIN 100% MODEL ---
     print("\nTRAINING 100% XGBOOST MODEL")
-    tr_idx, val_idx = train_test_split(
-        np.arange(len(X_train_full)), test_size=0.1, random_state=RANDOM_STATE
-    )
+    tr_idx, val_idx = train_test_split(np.arange(len(X_train_full)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr = X_train_full.iloc[tr_idx].copy()
     X_val = X_train_full.iloc[val_idx].copy()
     y_tr = y_full_transformed[tr_idx]
@@ -113,9 +109,7 @@ def main():
 
     # --- TRAIN 90% MODEL ---
     print("\nTRAINING 90% XGBOOST MODEL")
-    tr_idx_90, val_idx_90 = train_test_split(
-        np.arange(len(X_train_90)), test_size=0.1, random_state=RANDOM_STATE
-    )
+    tr_idx_90, val_idx_90 = train_test_split(np.arange(len(X_train_90)), test_size=0.1, random_state=RANDOM_STATE)
     X_tr_90 = X_train_90.iloc[tr_idx_90].copy()
     X_val_90 = X_train_90.iloc[val_idx_90].copy()
     y_tr_90 = y_90_transformed[tr_idx_90]

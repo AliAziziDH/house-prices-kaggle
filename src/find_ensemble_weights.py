@@ -82,9 +82,7 @@ def main():
         xgb_fold = clone(xgb_base)
         xgb_fold.fit(X_train_fold_xgb, y_train_fold_trans)
         y_pred_xgb_trans = xgb_fold.predict(X_val_fold_xgb)
-        xgb_oof[val_idx] = pt.inverse_transform(
-            y_pred_xgb_trans.reshape(-1, 1)
-        ).flatten()
+        xgb_oof[val_idx] = pt.inverse_transform(y_pred_xgb_trans.reshape(-1, 1)).flatten()
 
         # CatBoost
         cat_fold = clone(cat_base)
@@ -95,9 +93,7 @@ def main():
             verbose=False,
         )
         y_pred_cat_trans = cat_fold.predict(X_val_fold_cat)
-        cat_oof[val_idx] = pt.inverse_transform(
-            y_pred_cat_trans.reshape(-1, 1)
-        ).flatten()
+        cat_oof[val_idx] = pt.inverse_transform(y_pred_cat_trans.reshape(-1, 1)).flatten()
 
     y_true_orig = y_train_full.values
     xgb_oof_orig = xgb_oof

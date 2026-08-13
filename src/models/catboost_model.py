@@ -14,17 +14,13 @@ DEFAULT_CAT_PARAMS = {
 }
 
 
-def train_catboost_cv(
-    X_raw, y_raw, params=None, n_folds=5, seed=RANDOM_STATE, use_raw=False
-):
+def train_catboost_cv(X_raw, y_raw, params=None, n_folds=5, seed=RANDOM_STATE, use_raw=False):
     """Train CatBoost using leak-free CV."""
     model_params = params or DEFAULT_CAT_PARAMS
 
     cat_features = None
     if use_raw:
-        cat_features = X_raw.select_dtypes(
-            include=["object", "string"]
-        ).columns.tolist()
+        cat_features = X_raw.select_dtypes(include=["object", "string"]).columns.tolist()
 
     def model_factory(fold_idx):
         p = model_params.copy()

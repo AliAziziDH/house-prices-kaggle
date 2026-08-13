@@ -24,13 +24,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         # 1. LotFrontage statistics
         if "LotFrontage" in X.columns:
             if "Neighborhood" in X.columns:
-                self.lot_frontage_neighborhood_medians_ = (
-                    X.groupby("Neighborhood")["LotFrontage"].median().to_dict()
-                )
+                self.lot_frontage_neighborhood_medians_ = X.groupby("Neighborhood")["LotFrontage"].median().to_dict()
             med_val = X["LotFrontage"].median()
-            self.lot_frontage_global_median_ = (
-                float(med_val) if pd.notna(med_val) else 0.0
-            )
+            self.lot_frontage_global_median_ = float(med_val) if pd.notna(med_val) else 0.0
 
         # 2. Categorical modes
         cat_cols_with_missing = [
@@ -106,13 +102,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         # 5. LotFrontage imputation using fitted medians
         if "LotFrontage" in df.columns:
             if "Neighborhood" in df.columns and self.lot_frontage_neighborhood_medians_:
-                neigh_series = df["Neighborhood"].map(
-                    self.lot_frontage_neighborhood_medians_
-                )
+                neigh_series = df["Neighborhood"].map(self.lot_frontage_neighborhood_medians_)
                 df["LotFrontage"] = df["LotFrontage"].fillna(neigh_series)
-            df["LotFrontage"] = df["LotFrontage"].fillna(
-                self.lot_frontage_global_median_
-            )
+            df["LotFrontage"] = df["LotFrontage"].fillna(self.lot_frontage_global_median_)
 
         # 6. Categorical mode imputation using fitted modes
         for col, mode_val in self.categorical_modes_.items():
@@ -128,27 +120,11 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         if all(c in df.columns for c in ["TotalBsmtSF", "1stFlrSF", "2ndFlrSF"]):
             df["TotalSF"] = df["TotalBsmtSF"] + df["1stFlrSF"] + df["2ndFlrSF"]
 
-        if all(
-            c in df.columns
-            for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]
-        ):
-            df["TotalPorchSF"] = (
-                df["OpenPorchSF"]
-                + df["EnclosedPorch"]
-                + df["3SsnPorch"]
-                + df["ScreenPorch"]
-            )
+        if all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
+            df["TotalPorchSF"] = df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
 
-        if all(
-            c in df.columns
-            for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]
-        ):
-            df["TotalBathrooms"] = (
-                df["FullBath"]
-                + 0.5 * df["HalfBath"]
-                + df["BsmtFullBath"]
-                + 0.5 * df["BsmtHalfBath"]
-            )
+        if all(c in df.columns for c in ["FullBath", "HalfBath", "BsmtFullBath", "BsmtHalfBath"]):
+            df["TotalBathrooms"] = df["FullBath"] + 0.5 * df["HalfBath"] + df["BsmtFullBath"] + 0.5 * df["BsmtHalfBath"]
 
         if all(c in df.columns for c in ["YrSold", "YearBuilt"]):
             df["HouseAge"] = df["YrSold"] - df["YearBuilt"]
@@ -161,9 +137,7 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             df["QualityScore"] = df["OverallQual"] * df["OverallCond"]
 
         if all(c in df.columns for c in ["YrSold", "GarageYrBlt"]):
-            df["GarageAge"] = np.where(
-                df["GarageYrBlt"] == 0, 0, df["YrSold"] - df["GarageYrBlt"]
-            )
+            df["GarageAge"] = np.where(df["GarageYrBlt"] == 0, 0, df["YrSold"] - df["GarageYrBlt"])
 
         # 8. Ordinal encoding
         quality_map = {"Po": 1, "Fa": 2, "TA": 3, "Gd": 4, "Ex": 5}
@@ -262,9 +236,7 @@ if __name__ == "__main__":
     # --- 90/10 SPLIT ---
     from sklearn.model_selection import train_test_split
 
-    train_proper, calib_set = train_test_split(
-        train_full, test_size=0.1, random_state=42
-    )
+    train_proper, calib_set = train_test_split(train_full, test_size=0.1, random_state=42)
 
     train_proper = train_proper.reset_index(drop=True)
     calib_set = calib_set.reset_index(drop=True)
@@ -304,16 +276,13 @@ if __name__ == "__main__":
 
     import os
 
-
     os.makedirs("./processed_data", exist_ok=True)
     os.makedirs("./models", exist_ok=True)
 
     # save full datasets
     X_train_full.to_csv("./processed_data/X_train_full.csv", index=False)
     y_train_full.to_csv("./processed_data/y_train_full.csv", index=False)
-    train_full.drop("SalePrice", axis=1).to_csv(
-        "./processed_data/X_train_full_raw.csv", index=False
-    )
+    train_full.drop("SalePrice", axis=1).to_csv("./processed_data/X_train_full_raw.csv", index=False)
 
     # save 90% and 10%
     X_train.to_csv("./processed_data/X_train.csv", index=False)
@@ -324,12 +293,8 @@ if __name__ == "__main__":
 
     X_test.to_csv("./processed_data/X_test.csv", index=False)
 
-    train_proper.drop("SalePrice", axis=1).to_csv(
-        "./processed_data/X_train_raw.csv", index=False
-    )
-    calib_set.drop("SalePrice", axis=1).to_csv(
-        "./processed_data/X_calib_raw.csv", index=False
-    )
+    train_proper.drop("SalePrice", axis=1).to_csv("./processed_data/X_train_raw.csv", index=False)
+    calib_set.drop("SalePrice", axis=1).to_csv("./processed_data/X_calib_raw.csv", index=False)
     test.to_csv("./processed_data/X_test_raw.csv", index=False)
 
     # Instead of picking one transformer to save as boxcox_transformer, we use PowerTransformer in models.

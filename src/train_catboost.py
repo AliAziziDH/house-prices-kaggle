@@ -21,9 +21,7 @@ print("=" * 60)
 X_train_full_raw = pd.read_csv("./processed_data/X_train_full_raw.csv")
 y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
 
-cat_features = X_train_full_raw.select_dtypes(
-    include=["object", "str"]
-).columns.tolist()
+cat_features = X_train_full_raw.select_dtypes(include=["object", "str"]).columns.tolist()
 
 for col in cat_features:
     X_train_full_raw[col] = X_train_full_raw[col].fillna("Missing").astype(str)
@@ -71,9 +69,7 @@ def objective(trial):
 
         model.fit(X_train_fold, y_train_fold, cat_features=cat_features, verbose=False)
         y_pred_transformed = model.predict(X_val_fold)
-        y_pred_dollars = pt_full.inverse_transform(
-            y_pred_transformed.reshape(-1, 1)
-        ).flatten()
+        y_pred_dollars = pt_full.inverse_transform(y_pred_transformed.reshape(-1, 1)).flatten()
         y_val_original = pt_full.inverse_transform(y_val_fold.reshape(-1, 1)).flatten()
 
         rmsle_score = rmsle(y_val_original, y_pred_dollars)
@@ -105,12 +101,8 @@ def main():
     best_params_no_rs = {k: v for k, v in best_params.items() if k != "random_seed"}
 
     # 100% MODEL
-    best_model_full = CatBoostRegressor(
-        **best_params_no_rs, random_seed=RANDOM_STATE, verbose=False
-    )
-    best_model_full.fit(
-        X_train_full_clean, y_full_transformed, cat_features=cat_features
-    )
+    best_model_full = CatBoostRegressor(**best_params_no_rs, random_seed=RANDOM_STATE, verbose=False)
+    best_model_full.fit(X_train_full_clean, y_full_transformed, cat_features=cat_features)
 
     joblib.dump(best_model_full, "./models/catboost_best_rmsle.pkl")
 
@@ -119,9 +111,7 @@ def main():
     for col in cat_features:
         X_train_90_clean[col] = X_train_90_clean[col].fillna("Missing").astype(str)
 
-    best_model_90 = CatBoostRegressor(
-        **best_params_no_rs, random_seed=RANDOM_STATE, verbose=False
-    )
+    best_model_90 = CatBoostRegressor(**best_params_no_rs, random_seed=RANDOM_STATE, verbose=False)
     best_model_90.fit(X_train_90_clean, y_90_transformed, cat_features=cat_features)
 
     joblib.dump(best_model_90, "./models/catboost_90.pkl")

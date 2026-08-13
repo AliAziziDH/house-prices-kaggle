@@ -58,16 +58,10 @@ def main():
     xgb_calib_transformed = xgb_model_90.predict(X_calib)
     catboost_calib_transformed = catboost_model_90.predict(X_calib_raw)
 
-    xgb_calib_original = pt_90.inverse_transform(
-        xgb_calib_transformed.reshape(-1, 1)
-    ).flatten()
-    catboost_calib_original = pt_90.inverse_transform(
-        catboost_calib_transformed.reshape(-1, 1)
-    ).flatten()
+    xgb_calib_original = pt_90.inverse_transform(xgb_calib_transformed.reshape(-1, 1)).flatten()
+    catboost_calib_original = pt_90.inverse_transform(catboost_calib_transformed.reshape(-1, 1)).flatten()
 
-    ensemble_calib_original = (
-        weight_xgb * xgb_calib_original + weight_catboost * catboost_calib_original
-    )
+    ensemble_calib_original = weight_xgb * xgb_calib_original + weight_catboost * catboost_calib_original
 
     y_calib_log = np.log1p(y_calib)
     ensemble_calib_log = np.log1p(ensemble_calib_original)
@@ -86,16 +80,10 @@ def main():
     xgb_pred_transformed = xgb_model_full.predict(X_test)
     catboost_pred_transformed = catboost_model_full.predict(X_test_raw)
 
-    xgb_pred_original = pt_full.inverse_transform(
-        xgb_pred_transformed.reshape(-1, 1)
-    ).flatten()
-    catboost_pred_original = pt_full.inverse_transform(
-        catboost_pred_transformed.reshape(-1, 1)
-    ).flatten()
+    xgb_pred_original = pt_full.inverse_transform(xgb_pred_transformed.reshape(-1, 1)).flatten()
+    catboost_pred_original = pt_full.inverse_transform(catboost_pred_transformed.reshape(-1, 1)).flatten()
 
-    ensemble_pred_original = (
-        weight_xgb * xgb_pred_original + weight_catboost * catboost_pred_original
-    )
+    ensemble_pred_original = weight_xgb * xgb_pred_original + weight_catboost * catboost_pred_original
     ensemble_pred_log = np.log1p(ensemble_pred_original)
 
     y_pred_point, lower_bound, upper_bound = compute_prediction_intervals(
@@ -128,9 +116,7 @@ def main():
     os.makedirs("./submissions", exist_ok=True)
 
     submission.to_csv("submissions/submission.csv", index=False)
-    submission_intervals.to_csv(
-        "submissions/submission_with_intervals.csv", index=False
-    )
+    submission_intervals.to_csv("submissions/submission_with_intervals.csv", index=False)
 
     print("✅ Submission files saved.")
     print(f"   submission.csv: {submission.shape}")
