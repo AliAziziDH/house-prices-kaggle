@@ -19,6 +19,7 @@ st.title("🏡 Ames Housing: Prescriptive Decision Intelligence")
 # ============================================
 @st.cache_data
 def load_data():
+    mode = "Production Mode"
     try:
         df = pd.read_csv("./submissions/submission_with_intervals.csv")
     except Exception:  # noqa: BLE001
@@ -26,6 +27,7 @@ def load_data():
             df = pd.read_csv("./submission.csv")
         except Exception:  # noqa: BLE001
             # Generate synthetic sample predictions for headless/cloud environment
+            mode = "Simulation Mode"
             rng = np.random.default_rng(42)
             n_samples = 1459
             preds = rng.normal(180000, 50000, size=n_samples).clip(50000, 750000)
@@ -49,10 +51,11 @@ def load_data():
     rng = np.random.default_rng(42)
     noise = rng.uniform(-4000, 4000, size=len(df))
     df["Asking_Price"] = 0.92 * df["SalePrice_pred"] + noise
-    return df
+    return df, mode
 
 
-df = load_data()
+df, app_mode = load_data()
+st.sidebar.info(f"Mode: {app_mode}")
 
 # ============================================
 # SIDEBAR CONTROLS
