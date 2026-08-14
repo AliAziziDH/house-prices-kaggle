@@ -25,7 +25,7 @@ def solve_pyomo(df: pd.DataFrame, budget: float, theta: float, fractional_mode: 
     N = len(df)
     asking_prices = df["Asking_Price"].values
     expected_profits = (df["SalePrice_pred"] - df["Asking_Price"]).values
-    lower_bounds = df["SalePrice_Lower"].values
+    lower_bounds = df["LowerBound"].values
 
     m = pyo.ConcreteModel(doc="Portfolio Optimization Model")
     m.I = pyo.RangeSet(0, N - 1, doc="Set of available properties")
@@ -85,7 +85,7 @@ def recommend_portfolio(budget=1500000.0, theta=0.10, fractional_mode=False):
         "Id",
         "SalePrice_pred",
         "Asking_Price",
-        "SalePrice_Lower",
+        "LowerBound",
         "Expected_Profit",
         "Conformal_Downside",
         "Selected_Fraction",

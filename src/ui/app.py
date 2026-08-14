@@ -35,8 +35,8 @@ def load_data():
                 {
                     "Id": np.arange(1461, 1461 + n_samples),
                     "SalePrice": preds,
-                    "SalePrice_Lower": preds * 0.9,
-                    "SalePrice_Upper": preds * 1.1,
+                    "LowerBound": preds * 0.9,
+                    "UpperBound": preds * 1.1,
                     "Neighborhood": rng.choice(
                         ["NAmes", "CollgCr", "OldTown", "Edwards", "Somerst"],
                         size=n_samples,
@@ -134,7 +134,7 @@ with tab1:
     fig1.add_trace(
         go.Scatter(
             x=viz_df.index,
-            y=viz_df["SalePrice_Upper"],
+            y=viz_df["UpperBound"],
             mode="lines",
             line={"width": 0},
             showlegend=False,
@@ -146,7 +146,7 @@ with tab1:
     fig1.add_trace(
         go.Scatter(
             x=viz_df.index,
-            y=viz_df["SalePrice_Lower"],
+            y=viz_df["LowerBound"],
             mode="lines",
             line={"width": 0},
             fill="tonexty",
