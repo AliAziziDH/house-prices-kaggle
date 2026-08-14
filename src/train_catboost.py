@@ -11,7 +11,7 @@ from src.metrics import rmsle
 
 RANDOM_STATE = 42
 N_FOLDS = 5
-N_TRIALS = 1
+N_TRIALS = 50
 
 print("=" * 60)
 print("LOADING RAW DATA FOR CATBOOST")
@@ -39,7 +39,7 @@ y_90_transformed = np.log1p(y_train_90.values)
 def objective(trial):
     params = {
         "iterations": trial.suggest_int("iterations", 100, 1000, step=100),
-        "depth": trial.suggest_int("depth", 3, 10),
+        "depth": trial.suggest_int("depth", 2, 3),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1, 10, log=True),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),

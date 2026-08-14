@@ -5,6 +5,39 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
+def fit_neighborhood_rank(X_train, y_train):
+    """
+    Fits the 1-25 Neighborhood Target Rank based on median SalePrice per sqft.
+    Returns a dictionary mapping Neighborhood string -> rank integer.
+    """
+    if "GrLivArea" not in X_train.columns:
+        medians = y_train.groupby(X_train["Neighborhood"]).median()
+    else:
+        price_per_sqft = y_train / X_train["GrLivArea"]
+        medians = price_per_sqft.groupby(X_train["Neighborhood"]).median()
+
+    sorted_neighborhoods = medians.sort_values().index
+    rank_mapping = {neigh: i + 1 for i, neigh in enumerate(sorted_neighborhoods)}
+
+    if len(rank_mapping) > 1:
+        min_rank = 1
+        max_rank = len(rank_mapping)
+        for k, v in rank_mapping.items():
+            scaled = 1 + ((v - min_rank) / (max_rank - min_rank)) * 24
+            rank_mapping[k] = int(round(scaled))
+
+    return rank_mapping
+
+def transform_neighborhood_rank(X, rank_mapping):
+    """
+    Applies the rank mapping to the dataset.
+    Any unseen neighborhoods get the fallback rank of 13.
+    """
+    if "Neighborhood" in X.columns:
+        return X["Neighborhood"].map(rank_mapping).fillna(13).astype(int)
+    return pd.Series(13, index=X.index)
+
+
 class AmesDataTransformer(BaseEstimator, TransformerMixin):
     """
     Stateful Scikit-Learn transformer for Ames Housing data.
@@ -122,7 +155,8 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             df["TotalSF"] = df["GrLivArea"] + df["TotalBsmtSF"]
 
         if all(c in df.columns for c in ["WoodDeckSF", "OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
-            df["TotalPorchSF"] = df["WoodDeckSF"] + df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
+            df["TotalPorchSF"] = df["WoodDeckSF"] + df["OpenPorchSF"] + df["EnclosedPorch"] + \
+                                 df["3SsnPorch"] + df["ScreenPorch"]
         elif all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
             df["TotalPorchSF"] = df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
 

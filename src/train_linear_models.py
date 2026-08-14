@@ -58,6 +58,7 @@ def main():
         X_tr, X_va = X_train_full.iloc[train_idx].copy(), X_train_full.iloc[val_idx].copy()
         y_tr = y_train_full.iloc[train_idx]
 
+        # Calculate LOO fold-local encoding to prevent target leakage
         train_neighborhoods = raw_neighborhoods.iloc[train_idx]
         val_neighborhoods = raw_neighborhoods.iloc[val_idx]
 
@@ -103,6 +104,7 @@ def main():
         model_elasticnet = TransformedTargetRegressor(regressor=base_elasticnet, func=np.log1p, inverse_func=np.expm1)
         model_elasticnet.fit(X_tr, y_tr)
         oof_elasticnet[val_idx] = model_elasticnet.predict(X_va)
+
 
     print("\nTRAINING 100% LINEAR MODELS...")
     global_mean_full = y_train_full.mean()
@@ -188,6 +190,8 @@ def main():
     )
     model_elasticnet_90.fit(X_train_90_enc, y_train_90)
 
+
+
     # Save test encodings
     X_test_linear_encoded = X_test_linear.copy()
     test_encodings = []
@@ -212,6 +216,7 @@ def main():
 
     X_test_linear_encoded.to_csv("./processed_data/X_test_linear.csv", index=False)
     X_calib_linear_encoded.to_csv("./processed_data/X_calib_linear.csv", index=False)
+
 
 
     from src.metrics import rmsle
