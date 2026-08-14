@@ -1,7 +1,9 @@
 import json
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
+
 
 def rmsle(y_true, y_pred):
     return np.sqrt(mean_squared_error(np.log1p(y_true), np.log1p(y_pred)))
@@ -19,7 +21,8 @@ def main():
 
         # Extract predictions for xgb/catboost
         oof_xgb = oof_xgb_df["OOF_SalePrice"] if "OOF_SalePrice" in oof_xgb_df.columns else oof_xgb_df["SalePrice"]
-        oof_catboost = oof_catboost_df["OOF_SalePrice"] if "OOF_SalePrice" in oof_catboost_df.columns else oof_catboost_df["SalePrice"]
+        oof_catboost = oof_catboost_df["OOF_SalePrice"] if "OOF_SalePrice" in oof_catboost_df.columns else \
+            oof_catboost_df["SalePrice"]
     except FileNotFoundError:
         print("Required OOF files not found! Make sure to run all model training scripts first.")
         return

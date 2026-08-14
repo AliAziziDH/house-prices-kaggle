@@ -11,7 +11,7 @@ from src.metrics import rmsle
 
 RANDOM_STATE = 42
 N_FOLDS = 5
-N_TRIALS = 1
+N_TRIALS = 50
 
 print("=" * 60)
 print("LOADING PROCESSED DATA FOR XGBOOST")
@@ -29,11 +29,14 @@ y_90_transformed = np.log1p(y_train_90.values)
 def objective(trial):
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 100, 1000, step=100),
-        "max_depth": trial.suggest_int("max_depth", 3, 10),
+        "max_depth": trial.suggest_int("max_depth", 2, 3),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+        "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
+
         "random_state": RANDOM_STATE,
         "verbosity": 0,
     }
