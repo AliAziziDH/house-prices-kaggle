@@ -17,7 +17,7 @@ def solve_greedy(df: pd.DataFrame, budget: float, theta: float) -> pd.DataFrame:
     # Calculate Expected Profit and Downside Risk
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
     df["ROI"] = df["Expected_Profit"] / df["Asking_Price"]
-    df["Downside_Risk"] = df["Asking_Price"] - df["SalePrice_Lower"]
+    df["Downside_Risk"] = df["Asking_Price"] - df["LowerBound"]
 
     # Sort by ROI descending
     df_sorted = df.sort_values("ROI", ascending=False).reset_index()
@@ -43,7 +43,7 @@ def solve_greedy(df: pd.DataFrame, budget: float, theta: float) -> pd.DataFrame:
     df["Selected_Fraction"] = 0.0
     df.loc[selected_idx, "Selected_Fraction"] = 1.0
     df["Expected_Profit"] = df["SalePrice_pred"] - df["Asking_Price"]
-    df["Conformal_Downside"] = df["Asking_Price"] - df["SalePrice_Lower"]
+    df["Conformal_Downside"] = df["Asking_Price"] - df["LowerBound"]
     return df
 
 
@@ -65,9 +65,9 @@ def load_prediction_data() -> pd.DataFrame:
 
     df = pd.read_csv(input_path)
 
-    if "SalePrice_Lower" not in df.columns:
+    if "LowerBound" not in df.columns:
         logger.warning("Conformal bounds missing. Simulating 5% bounds for optimization.")
-        df["SalePrice_Lower"] = df["SalePrice"] * 0.95
-        df["SalePrice_Upper"] = df["SalePrice"] * 1.05
+        df["LowerBound"] = df["SalePrice"] * 0.95
+        df["UpperBound"] = df["SalePrice"] * 1.05
 
     return df.rename(columns={"SalePrice": "SalePrice_pred"})

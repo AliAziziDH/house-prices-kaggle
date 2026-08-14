@@ -79,13 +79,13 @@ def test_conformal_intervals():
     if os.path.exists("./submissions/submission_with_intervals.csv"):
         df = pd.read_csv("./submissions/submission_with_intervals.csv")
         # Lower bound < Point < Upper bound
-        assert (df["SalePrice_Lower"] <= df["SalePrice"]).all()
-        assert (df["SalePrice"] <= df["SalePrice_Upper"]).all()
+        assert (df["LowerBound"] <= df["SalePrice"]).all()
+        assert (df["SalePrice"] <= df["UpperBound"]).all()
 
         # Lower bound clamped to min $42000
-        assert (df["SalePrice_Lower"] >= 42000.0).all()
+        assert (df["LowerBound"] >= 42000.0).all()
         # Upper bound clamped to max $525000
-        assert (df["SalePrice_Upper"] <= 525000.0).all()
+        assert (df["UpperBound"] <= 525000.0).all()
 
 
 def test_pyomo_portfolio_solver():
@@ -100,8 +100,8 @@ def test_pyomo_portfolio_solver():
         {
             "Id": [101, 102, 103, 104, 105],
             "SalePrice_pred": [200000, 250000, 150000, 300000, 180000],
-            "SalePrice_Lower": [180000, 210000, 140000, 270000, 160000],
-            "SalePrice_Upper": [220000, 290000, 160000, 330000, 200000],
+            "LowerBound": [180000, 210000, 140000, 270000, 160000],
+            "UpperBound": [220000, 290000, 160000, 330000, 200000],
         }
     )
 

@@ -95,8 +95,8 @@ def main():
         {
             "Id": test_ids,
             "SalePrice": y_pred_point,
-            "SalePrice_Lower": lower_bound,
-            "SalePrice_Upper": upper_bound,
+            "LowerBound": lower_bound,
+            "UpperBound": upper_bound,
         }
     )
 
