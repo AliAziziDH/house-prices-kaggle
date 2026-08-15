@@ -1,7 +1,6 @@
 import os
 
 import numpy as np
-import optuna
 import pandas as pd
 import xgboost as xgb
 from catboost import CatBoostRegressor
@@ -148,14 +147,16 @@ def main():
     train_90 = train_90.reset_index(drop=True)
     calib_10 = calib_10.reset_index(drop=True)
 
+    from src.utils.optuna_helper import setup_optuna_study
+
     print("\n--- Tuning XGBoost ---")
-    study_xgb = optuna.create_study(direction="minimize")
+    study_xgb = setup_optuna_study(study_name="xgb_bifurcated")
     study_xgb.optimize(lambda trial: objective_xgb(trial, train_full), n_trials=N_TRIALS, n_jobs=-1)
     best_xgb_params = study_xgb.best_params
     best_xgb_params.update({"random_state": RANDOM_STATE, "verbosity": 0})
 
     print("\n--- Tuning CatBoost ---")
-    study_cat = optuna.create_study(direction="minimize")
+    study_cat = setup_optuna_study(study_name="cat_bifurcated")
     study_cat.optimize(lambda trial: objective_cat(trial, train_full), n_trials=N_TRIALS, n_jobs=-1)
     best_cat_params = study_cat.best_params
     best_cat_params.update({"random_seed": RANDOM_STATE, "verbose": False})

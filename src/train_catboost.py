@@ -1,13 +1,11 @@
-import os
-
 import joblib
 import numpy as np
-import optuna
 import pandas as pd
 from catboost import CatBoostRegressor
 from sklearn.model_selection import KFold
 
 from src.metrics import rmsle
+from src.utils.optuna_helper import setup_optuna_study
 
 RANDOM_STATE = 42
 N_FOLDS = 5
@@ -75,14 +73,10 @@ def objective(trial):
 
 
 def main():
-    os.makedirs("./experiments", exist_ok=True)
-    os.makedirs("./models", exist_ok=True)
-
-    study = optuna.create_study(
-        direction="minimize",
+    study = setup_optuna_study(
         study_name="catboost_raw_optimization_rmsle",
-        storage=f"sqlite:///{os.path.abspath('./experiments/catboost_raw_study_rmsle.db')}",
-        load_if_exists=True,
+        db_name="catboost_raw_study_rmsle.db",
+        direction="minimize",
     )
     study.optimize(objective, n_trials=N_TRIALS)
 

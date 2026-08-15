@@ -1,13 +1,12 @@
-import os
 
 import joblib
 import numpy as np
-import optuna
 import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
 from xgboost import XGBRegressor
 
 from src.metrics import rmsle
+from src.utils.optuna_helper import setup_optuna_study
 
 RANDOM_STATE = 42
 N_FOLDS = 5
@@ -56,13 +55,10 @@ def objective(trial):
 
 
 def main():
-    os.makedirs("./experiments", exist_ok=True)
-    os.makedirs("./models", exist_ok=True)
-    study = optuna.create_study(
-        direction="minimize",
+    study = setup_optuna_study(
         study_name="xgboost_optimization_rmsle",
-        storage=f"sqlite:///{os.path.abspath('./experiments/xgboost_study_rmsle.db')}",
-        load_if_exists=True,
+        db_name="xgboost_study_rmsle.db",
+        direction="minimize",
     )
     study.optimize(objective, n_trials=N_TRIALS)
     best_params = study.best_params
