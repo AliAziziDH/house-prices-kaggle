@@ -35,21 +35,7 @@ def load_best_params(model_name):
     }
 
 
-def main():
-    print("=" * 60)
-    print("LOADING FULL DATA FOR ENSEMBLE SLSQP (LOG-SPACE STACKING)")
-    print("=" * 60)
-
-    try:
-        X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
-        y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
-        X_train_full_raw = pd.read_csv("./processed_data/X_train_full_raw.csv")
-    except FileNotFoundError:
-        print("Data not found, skipping optimization logic.")
-        return
-
-    y_full_transformed = np.log1p(y_train_full.values)
-
+def load_or_generate_oof(X_train_full, X_train_full_raw, y_full_transformed):
     kf = KFold(n_splits=10, shuffle=True, random_state=42)
 
     xgb_oof = np.zeros(len(X_train_full))
@@ -117,13 +103,10 @@ def main():
         xgb_df.to_csv(oof_xgb_path, index=False)
         cat_df.to_csv(oof_cat_path, index=False)
 
-    print("Loading pre-calculated OOF predictions for remaining models...")
-    oof_ridge_phys = pd.read_csv("./processed_data/oof_ridge.csv").squeeze().values
-    oof_ridge = np.log1p(np.clip(oof_ridge_phys, 1, None))
+    return xgb_oof, cat_oof
 
-    preds = np.column_stack([xgb_oof, cat_oof, oof_ridge])
-    model_names = ["xgb", "catboost", "ridge"]
 
+def optimize_weights(preds, y_full_transformed, model_names):
     errors = np.zeros_like(preds)
     for j in range(preds.shape[1]):
         errors[:, j] = y_full_transformed - preds[:, j]
@@ -162,6 +145,35 @@ def main():
     with open("./models/ensemble_weights.json", "w") as f:
         json.dump(weight_dict, f, indent=4)
     print("✅ Saved optimal weights to models/ensemble_weights.json")
+
+    return weight_dict
+
+
+def main():
+    print("=" * 60)
+    print("LOADING FULL DATA FOR ENSEMBLE SLSQP (LOG-SPACE STACKING)")
+    print("=" * 60)
+
+    try:
+        X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
+        y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
+        X_train_full_raw = pd.read_csv("./processed_data/X_train_full_raw.csv")
+    except FileNotFoundError:
+        print("Data not found, skipping optimization logic.")
+        return
+
+    y_full_transformed = np.log1p(y_train_full.values)
+
+    xgb_oof, cat_oof = load_or_generate_oof(X_train_full, X_train_full_raw, y_full_transformed)
+
+    print("Loading pre-calculated OOF predictions for remaining models...")
+    oof_ridge_phys = pd.read_csv("./processed_data/oof_ridge.csv").squeeze().values
+    oof_ridge = np.log1p(np.clip(oof_ridge_phys, 1, None))
+
+    preds = np.column_stack([xgb_oof, cat_oof, oof_ridge])
+    model_names = ["xgb", "catboost", "ridge"]
+
+    optimize_weights(preds, y_full_transformed, model_names)
 
 
 if __name__ == "__main__":
