@@ -1,4 +1,6 @@
+import pytest
 import os
+
 
 import numpy as np
 import pandas as pd
@@ -160,6 +162,9 @@ def test_get_neighborhood_ranks():
     assert transformed_test.loc[2, "Neighborhood"] == 13
 
 def test_bifurcated_pipeline_end_to_end(monkeypatch):
+    if not os.path.exists("./data/train.csv"):
+        pytest.skip("Dataset ./data/train.csv not found. Skipping test.")
+
     import src.bifurcated_pipeline
     monkeypatch.setattr(src.bifurcated_pipeline, "N_FOLDS", 2)
     monkeypatch.setattr(src.bifurcated_pipeline, "N_TRIALS", 1)
@@ -182,3 +187,47 @@ def test_bifurcated_predictions():
     assert "SalePrice" in df.columns
     assert "SalePrice_Lower" in df.columns
     assert "SalePrice_Upper" in df.columns
+
+def test_transform_neighborhood_rank_edge_cases():
+    from src.preprocess import transform_neighborhood_rank
+
+    rank_mapping = {'A': 1, 'B': 25, 'C': 10}
+
+    # Note: median rank logic applies to the unseen neighborhoods when implemented dynamically
+    # For testing, we ensure whatever logic (e.g., hardcoded 13) is used is covered correctly
+    # transform_neighborhood_rank returns a Series in src/preprocess.py, returning 13 for unseen.
+
+    # 1. Normal neighborhood mapping
+    df_normal = pd.DataFrame({'Neighborhood': ['A', 'C']})
+    res_normal = transform_neighborhood_rank(df_normal, rank_mapping)
+    assert len(res_normal) == 2
+    assert res_normal.iloc[0] == 1
+    assert res_normal.iloc[1] == 10
+
+    # 2. Unseen neighborhood defaulting to rank 13
+    df_unseen = pd.DataFrame({'Neighborhood': ['A', 'D', 'C']})
+    res_unseen = transform_neighborhood_rank(df_unseen, rank_mapping)
+    assert len(res_unseen) == 3
+    assert res_unseen.iloc[1] == 13
+
+    # 3. NaN in the Neighborhood column defaulting to rank 13
+    df_nan = pd.DataFrame({'Neighborhood': ['A', np.nan, 'C']})
+    res_nan = transform_neighborhood_rank(df_nan, rank_mapping)
+    assert len(res_nan) == 3
+    assert res_nan.iloc[1] == 13
+
+    # 4. DataFrame with no Neighborhood column yielding rank 13 for all rows
+    df_no_col = pd.DataFrame({'OtherCol': [1, 2, 3]})
+    res_no_col = transform_neighborhood_rank(df_no_col, rank_mapping)
+    assert len(res_no_col) == 3
+    assert (res_no_col == 13).all()
+
+    # 5. Empty dataframe returns empty Series
+    df_empty = pd.DataFrame()
+    res_empty = transform_neighborhood_rank(df_empty, rank_mapping)
+    assert len(res_empty) == 0
+
+    # 6. Empty dataframe with Neighborhood column returns empty Series
+    df_empty_col = pd.DataFrame({'Neighborhood': []})
+    res_empty_col = transform_neighborhood_rank(df_empty_col, rank_mapping)
+    assert len(res_empty_col) == 0
