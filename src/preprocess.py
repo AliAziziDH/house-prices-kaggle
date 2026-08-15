@@ -28,6 +28,7 @@ def fit_neighborhood_rank(X_train, y_train):
 
     return rank_mapping
 
+
 def transform_neighborhood_rank(X, rank_mapping):
     """
     Applies the rank mapping to the dataset.
@@ -155,8 +156,9 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             df["TotalSF"] = df["GrLivArea"] + df["TotalBsmtSF"]
 
         if all(c in df.columns for c in ["WoodDeckSF", "OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
-            df["TotalPorchSF"] = df["WoodDeckSF"] + df["OpenPorchSF"] + df["EnclosedPorch"] + \
-                                 df["3SsnPorch"] + df["ScreenPorch"]
+            df["TotalPorchSF"] = (
+                df["WoodDeckSF"] + df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
+            )
         elif all(c in df.columns for c in ["OpenPorchSF", "EnclosedPorch", "3SsnPorch", "ScreenPorch"]):
             df["TotalPorchSF"] = df["OpenPorchSF"] + df["EnclosedPorch"] + df["3SsnPorch"] + df["ScreenPorch"]
 

@@ -27,10 +27,12 @@ def fit_neighborhood_rank(X_train, y_train):
 
     return rank_mapping
 
+
 def transform_neighborhood_rank(X, rank_mapping):
     if "Neighborhood" in X.columns:
         return X["Neighborhood"].map(rank_mapping).fillna(13).astype(int)
     return pd.Series(13, index=X.index)
+
 
 RANDOM_STATE = 42
 N_FOLDS = 5
@@ -64,14 +66,14 @@ def run_cv_experiment(
 
         y_tr_log = y_log.iloc[train_idx]
         if not use_raw_features:
-            if 'Neighborhood' in X_tr_raw.columns:
+            if "Neighborhood" in X_tr_raw.columns:
                 rank_mapping = fit_neighborhood_rank(X_tr_raw, y_tr_raw)
                 X_tr_raw = X_tr_raw.copy()
                 X_val_raw = X_val_raw.copy()
-                X_tr_raw['Neighborhood_Rank'] = transform_neighborhood_rank(X_tr_raw, rank_mapping)
-                X_val_raw['Neighborhood_Rank'] = transform_neighborhood_rank(X_val_raw, rank_mapping)
-                X_tr_raw = X_tr_raw.drop(columns=['Neighborhood'])
-                X_val_raw = X_val_raw.drop(columns=['Neighborhood'])
+                X_tr_raw["Neighborhood_Rank"] = transform_neighborhood_rank(X_tr_raw, rank_mapping)
+                X_val_raw["Neighborhood_Rank"] = transform_neighborhood_rank(X_val_raw, rank_mapping)
+                X_tr_raw = X_tr_raw.drop(columns=["Neighborhood"])
+                X_val_raw = X_val_raw.drop(columns=["Neighborhood"])
 
             transformer = AmesDataTransformer()
             transformer.fit(X_tr_raw, y_tr_raw)
@@ -82,10 +84,10 @@ def run_cv_experiment(
             X_tr = X_tr_raw.copy()
             X_val = X_val_raw.copy()
 
-            if 'Neighborhood' in X_tr_raw.columns:
+            if "Neighborhood" in X_tr_raw.columns:
                 rank_mapping = fit_neighborhood_rank(X_tr_raw, y_tr_raw)
-                X_tr['Neighborhood_Rank'] = transform_neighborhood_rank(X_tr_raw, rank_mapping)
-                X_val['Neighborhood_Rank'] = transform_neighborhood_rank(X_val_raw, rank_mapping)
+                X_tr["Neighborhood_Rank"] = transform_neighborhood_rank(X_tr_raw, rank_mapping)
+                X_val["Neighborhood_Rank"] = transform_neighborhood_rank(X_val_raw, rank_mapping)
 
             if cat_features:
                 for col in cat_features:
