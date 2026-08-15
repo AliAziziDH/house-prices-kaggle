@@ -1,11 +1,10 @@
-
 import joblib
 import numpy as np
-import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
 from xgboost import XGBRegressor
 
 from src.metrics import rmsle
+from src.utils import load_processed_data
 from src.utils.optuna_helper import setup_optuna_study
 
 RANDOM_STATE = 42
@@ -16,13 +15,7 @@ print("=" * 60)
 print("LOADING PROCESSED DATA FOR XGBOOST")
 print("=" * 60)
 
-X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
-y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
-y_full_transformed = np.log1p(y_train_full.values)
-
-X_train_90 = pd.read_csv("./processed_data/X_train.csv")
-y_train_90 = pd.read_csv("./processed_data/y_train.csv").squeeze()
-y_90_transformed = np.log1p(y_train_90.values)
+X_train_full, y_train_full, y_full_transformed, X_train_90, y_train_90, y_90_transformed = load_processed_data()
 
 
 def objective(trial):
@@ -35,7 +28,6 @@ def objective(trial):
         "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
         "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
         "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-
         "random_state": RANDOM_STATE,
         "verbosity": 0,
     }

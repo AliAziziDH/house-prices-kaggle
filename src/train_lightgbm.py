@@ -7,6 +7,7 @@ from lightgbm import LGBMRegressor
 from sklearn.model_selection import KFold
 
 from src.metrics import rmsle
+from src.utils import load_processed_data
 
 RANDOM_STATE = 42
 N_FOLDS = 5
@@ -17,13 +18,7 @@ def main():
     print("LOADING PROCESSED DATA FOR LIGHTGBM")
     print("=" * 60)
 
-    X_train_full = pd.read_csv("./processed_data/X_train_full.csv")
-    y_train_full = pd.read_csv("./processed_data/y_train_full.csv").squeeze()
-    y_full_transformed = np.log1p(y_train_full.values)
-
-    X_train_90 = pd.read_csv("./processed_data/X_train.csv")
-    y_train_90 = pd.read_csv("./processed_data/y_train.csv").squeeze()
-    y_90_transformed = np.log1p(y_train_90.values)
+    X_train_full, y_train_full, y_full_transformed, X_train_90, y_train_90, y_90_transformed = load_processed_data()
 
     params = {
         "n_estimators": 1000,
