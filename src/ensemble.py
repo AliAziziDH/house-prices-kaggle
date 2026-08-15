@@ -54,11 +54,7 @@ def main():
     # Neighborhood encoding handled by transformer now, X_calib_linear is ready
     ridge_calib_log = np.log1p(np.clip(ridge_model_90.predict(X_calib_linear), 1, None))
 
-    ensemble_calib_log = (
-        weight_xgb * xgb_calib_log
-        + weight_catboost * catboost_calib_log
-        + weight_ridge * ridge_calib_log
-    )
+    ensemble_calib_log = weight_xgb * xgb_calib_log + weight_catboost * catboost_calib_log + weight_ridge * ridge_calib_log
 
     y_calib_log = np.log1p(y_calib)
     residuals = compute_non_conformity_scores(y_calib_log, ensemble_calib_log)
@@ -76,11 +72,7 @@ def main():
 
     ridge_test_log = np.log1p(np.clip(ridge_model_full.predict(X_test_linear), 1, None))
 
-    ensemble_pred_log = (
-        weight_xgb * xgb_test_log
-        + weight_catboost * catboost_test_log
-        + weight_ridge * ridge_test_log
-    )
+    ensemble_pred_log = weight_xgb * xgb_test_log + weight_catboost * catboost_test_log + weight_ridge * ridge_test_log
 
     y_pred_point, lower_bound, upper_bound = compute_prediction_intervals(
         ensemble_pred_log, q, min_physical_price=42000.0, max_physical_price=525000.0

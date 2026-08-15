@@ -18,20 +18,21 @@ This script implements:
 """
 
 import os
-import sys
+
+import catboost as cb
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 from scipy.optimize import minimize
-from sklearn.model_selection import KFold
-from sklearn.preprocessing import QuantileTransformer, StandardScaler
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.linear_model import Ridge
-import xgboost as xgb
-import catboost as cb
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import QuantileTransformer, StandardScaler
 
 # Ensure outputs folder exists
 os.makedirs("submissions", exist_ok=True)
 os.makedirs("models", exist_ok=True)
+
 
 # ------------------------------------------------------------------------------
 # 1. LEAKAGE-FREE NEIGHBORHOOD TARGET ENCODING
@@ -41,6 +42,7 @@ class FoldLocalTargetEncoder:
     Calculates target statistics strictly on the active training folds
     to prevent target leakage, with fallback for unseen categories.
     """
+
     def __init__(self, category_col="Neighborhood", target_col="SalePrice", noise_level=0.01):
         self.category_col = category_col
         self.target_col = target_col
@@ -49,16 +51,13 @@ class FoldLocalTargetEncoder:
         self.global_median_ = 0.0
 
     def fit(self, X, y):
-        df_temp = pd.DataFrame({
-            'cat': X[self.category_col],
-            'target': y
-        })
-        group = df_temp.groupby('cat')['target'].median()
+        df_temp = pd.DataFrame({"cat": X[self.category_col], "target": y})
+        group = df_temp.groupby("cat")["target"].median()
         self.mapping_ = group.to_dict()
         self.global_median_ = np.median(y)
 
         sorted_cats = sorted(self.mapping_.items(), key=lambda x: x[1])
-        self.ranks_ = {cat: i+1 for i, (cat, _) in enumerate(sorted_cats)}
+        self.ranks_ = {cat: i + 1 for i, (cat, _) in enumerate(sorted_cats)}
         return self
 
     def transform(self, X, random_state=42):
@@ -70,8 +69,9 @@ class FoldLocalTargetEncoder:
             noise = np.random.normal(0, self.noise_level, size=len(mapped_ranks))
             mapped_ranks += noise
 
-        X_out[self.category_col + '_Rank'] = mapped_ranks
+        X_out[self.category_col + "_Rank"] = mapped_ranks
         return X_out
+
 
 # ------------------------------------------------------------------------------
 # 2. DATA PREPROCESSING PIPELINE
@@ -84,8 +84,8 @@ def load_and_preprocess(train_path="data/train.csv", test_path="data/test.csv"):
     train_df = pd.read_csv(train_path, index_col="Id")
     test_df = pd.read_csv(test_path, index_col="Id")
 
-    train_df.columns = [c.replace(' ', '') for c in train_df.columns]
-    test_df.columns = [c.replace(' ', '') for c in test_df.columns]
+    train_df.columns = [c.replace(" ", "") for c in train_df.columns]
+    test_df.columns = [c.replace(" ", "") for c in test_df.columns]
 
     y = train_df["SalePrice"].values
     X_train_raw = train_df.drop(columns=["SalePrice"])
@@ -101,6 +101,7 @@ def load_and_preprocess(train_path="data/train.csv", test_path="data/test.csv"):
             X_test_raw[col] = X_test_raw[col].fillna("None").astype(str)
 
     return X_train_raw, y, X_test_raw
+
 
 # ------------------------------------------------------------------------------
 # 3. SLSQP CONVEX COVARIANCE-REGULARIZED SOLVER
@@ -120,17 +121,14 @@ def solve_slsqp_weights(OOF_preds, y_true, lmbda=0.1):
         penalty = lmbda * np.dot(w, np.dot(cov_matrix, w))
         return sse + penalty
 
-    constraints = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1.0})
+    constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1.0}
     bounds = [(0.0, 1.0) for _ in range(num_models)]
 
     res = minimize(
-        fun=objective,
-        x0=np.ones(num_models) / num_models,
-        method='SLSQP',
-        bounds=bounds,
-        constraints=constraints
+        fun=objective, x0=np.ones(num_models) / num_models, method="SLSQP", bounds=bounds, constraints=constraints
     )
     return res.x
+
 
 # ------------------------------------------------------------------------------
 # 4. BI-LEVEL GEM-ITH OPTIMIZATION
@@ -146,7 +144,7 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
     numeric_cols = [col for col in X_train.columns if X_train[col].dtype in [np.float64, np.int64]]
 
-    best_rmsle = float('inf')
+    best_rmsle = float("inf")
     best_params = {}
     best_weights = None
 
@@ -175,7 +173,7 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
             X_tr_enc = encoder.transform(X_tr)
             X_val_enc = encoder.transform(X_val)
 
-            all_num_cols = numeric_cols + ['Neighborhood_Rank']
+            all_num_cols = numeric_cols + ["Neighborhood_Rank"]
             X_tr_num = X_tr_enc[all_num_cols]
             X_val_num = X_val_enc[all_num_cols]
 
@@ -192,43 +190,25 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
                 reg_lambda=xgb_reg_lambda,
                 n_estimators=100,
                 random_state=42,
-                n_jobs=-1
+                n_jobs=-1,
             )
-            transformed_xgb = TransformedTargetRegressor(
-                regressor=model_xgb,
-                func=np.log1p,
-                inverse_func=np.expm1
-            )
+            transformed_xgb = TransformedTargetRegressor(regressor=model_xgb, func=np.log1p, inverse_func=np.expm1)
             transformed_xgb.fit(X_tr_scaled, y_tr)
             oof_preds[val_idx, 0] = transformed_xgb.predict(X_val_scaled)
 
             # --- Model 2: CatBoost (Log-Space Target) ---
             model_cb = cb.CatBoostRegressor(
-                learning_rate=cb_lr,
-                depth=cb_depth,
-                l2_leaf_reg=cb_l2,
-                iterations=100,
-                verbose=False,
-                random_state=42
+                learning_rate=cb_lr, depth=cb_depth, l2_leaf_reg=cb_l2, iterations=100, verbose=False, random_state=42
             )
-            transformed_cb = TransformedTargetRegressor(
-                regressor=model_cb,
-                func=np.log1p,
-                inverse_func=np.expm1
-            )
+            transformed_cb = TransformedTargetRegressor(regressor=model_cb, func=np.log1p, inverse_func=np.expm1)
             transformed_cb.fit(X_tr_scaled, y_tr)
             oof_preds[val_idx, 1] = transformed_cb.predict(X_val_scaled)
 
             # --- Model 3: Ridge (Normal Quantile Target Transform) ---
             target_transformer = QuantileTransformer(
-                n_quantiles=min(len(X_tr_scaled) - 1, 50),
-                output_distribution='normal',
-                random_state=42
+                n_quantiles=min(len(X_tr_scaled) - 1, 50), output_distribution="normal", random_state=42
             )
-            transformed_ridge = TransformedTargetRegressor(
-                regressor=Ridge(alpha=10.0),
-                transformer=target_transformer
-            )
+            transformed_ridge = TransformedTargetRegressor(regressor=Ridge(alpha=10.0), transformer=target_transformer)
             transformed_ridge.fit(X_tr_scaled, y_tr)
             oof_preds[val_idx, 2] = transformed_ridge.predict(X_val_scaled)
 
@@ -240,14 +220,22 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
             best_rmsle = rmsle
             best_weights = weights
             best_params = {
-                'xgb_lr': xgb_lr, 'xgb_depth': xgb_depth, 'xgb_subsample': xgb_subsample,
-                'xgb_colsample': xgb_colsample, 'xgb_reg_lambda': xgb_reg_lambda,
-                'cb_lr': cb_lr, 'cb_depth': cb_depth, 'cb_l2': cb_l2
+                "xgb_lr": xgb_lr,
+                "xgb_depth": xgb_depth,
+                "xgb_subsample": xgb_subsample,
+                "xgb_colsample": xgb_colsample,
+                "xgb_reg_lambda": xgb_reg_lambda,
+                "cb_lr": cb_lr,
+                "cb_depth": cb_depth,
+                "cb_l2": cb_l2,
             }
-            print(f" [Trial {trial:02d}/{n_trials}] Found Better Joint Params! RMSLE: {best_rmsle:.5f} | Weights: {best_weights}")
+            print(
+                f" [Trial {trial:02d}/{n_trials}] Found Better Joint Params! RMSLE: {best_rmsle:.5f} | Weights: {best_weights}"
+            )
 
     print(f"\n[+] GEM-ITH Optimization Complete! Best OOF RMSLE: {best_rmsle:.5f}")
     return best_params, best_weights
+
 
 # ------------------------------------------------------------------------------
 # 5. CALIBRATION & CONFORMAL PSEUDO-LABELING (SemiCP)
@@ -276,7 +264,7 @@ def train_and_conformal_pseudolabel(X_train, y, X_test, best_params, best_weight
     X_test_enc = encoder.transform(X_test)
 
     numeric_cols = [col for col in X_train.columns if X_train[col].dtype in [np.float64, np.int64]]
-    all_num_cols = numeric_cols + ['Neighborhood_Rank']
+    all_num_cols = numeric_cols + ["Neighborhood_Rank"]
 
     scaler = StandardScaler()
     X_prop_scaled = scaler.fit_transform(X_prop_enc[all_num_cols])
@@ -285,40 +273,40 @@ def train_and_conformal_pseudolabel(X_train, y, X_test, best_params, best_weight
 
     # --- XGBoost ---
     model_xgb = xgb.XGBRegressor(
-        learning_rate=best_params['xgb_lr'],
-        max_depth=best_params['xgb_depth'],
-        subsample=best_params['xgb_subsample'],
-        colsample_bytree=best_params['xgb_colsample'],
-        reg_lambda=best_params['xgb_reg_lambda'],
+        learning_rate=best_params["xgb_lr"],
+        max_depth=best_params["xgb_depth"],
+        subsample=best_params["xgb_subsample"],
+        colsample_bytree=best_params["xgb_colsample"],
+        reg_lambda=best_params["xgb_reg_lambda"],
         n_estimators=100,
         random_state=42,
-        n_jobs=-1
+        n_jobs=-1,
     )
     xgb_reg = TransformedTargetRegressor(regressor=model_xgb, func=np.log1p, inverse_func=np.expm1)
     xgb_reg.fit(X_prop_scaled, y_prop)
 
     # --- CatBoost ---
     model_cb = cb.CatBoostRegressor(
-        learning_rate=best_params['cb_lr'],
-        depth=best_params['cb_depth'],
-        l2_leaf_reg=best_params['cb_l2'],
+        learning_rate=best_params["cb_lr"],
+        depth=best_params["cb_depth"],
+        l2_leaf_reg=best_params["cb_l2"],
         iterations=100,
         verbose=False,
-        random_state=42
+        random_state=42,
     )
     cb_reg = TransformedTargetRegressor(regressor=model_cb, func=np.log1p, inverse_func=np.expm1)
     cb_reg.fit(X_prop_scaled, y_prop)
 
     # --- Ridge ---
-    target_transformer = QuantileTransformer(n_quantiles=min(len(X_prop_scaled)-1, 50), output_distribution='normal', random_state=42)
+    target_transformer = QuantileTransformer(
+        n_quantiles=min(len(X_prop_scaled) - 1, 50), output_distribution="normal", random_state=42
+    )
     ridge_reg = TransformedTargetRegressor(regressor=Ridge(alpha=10.0), transformer=target_transformer)
     ridge_reg.fit(X_prop_scaled, y_prop)
 
-    cal_preds = np.column_stack([
-        xgb_reg.predict(X_cal_scaled),
-        cb_reg.predict(X_cal_scaled),
-        ridge_reg.predict(X_cal_scaled)
-    ])
+    cal_preds = np.column_stack(
+        [xgb_reg.predict(X_cal_scaled), cb_reg.predict(X_cal_scaled), ridge_reg.predict(X_cal_scaled)]
+    )
     cal_ensemble = np.dot(cal_preds, best_weights)
 
     nonconformity_scores = np.abs(np.log1p(y_cal) - np.log1p(cal_ensemble))
@@ -327,11 +315,9 @@ def train_and_conformal_pseudolabel(X_train, y, X_test, best_params, best_weight
     q_threshold = np.quantile(nonconformity_scores, quantile_val)
     print(f" [+] Calibrated Conformal Log-Residual Threshold at 95% Confidence: {q_threshold:.5f}")
 
-    test_preds = np.column_stack([
-        xgb_reg.predict(X_test_scaled),
-        cb_reg.predict(X_test_scaled),
-        ridge_reg.predict(X_test_scaled)
-    ])
+    test_preds = np.column_stack(
+        [xgb_reg.predict(X_test_scaled), cb_reg.predict(X_test_scaled), ridge_reg.predict(X_test_scaled)]
+    )
     test_ensemble = np.dot(test_preds, best_weights)
 
     test_lower_bound = np.clip(np.expm1(np.clip(np.log1p(test_ensemble) - q_threshold, 0, None)), 42000.0, 525000.0)
@@ -370,30 +356,32 @@ def train_and_conformal_pseudolabel(X_train, y, X_test, best_params, best_weight
     final_ridge = TransformedTargetRegressor(regressor=Ridge(alpha=10.0), transformer=target_transformer)
     final_ridge.fit(X_enriched_scaled, y_enriched)
 
-    final_test_preds = np.column_stack([
-        final_xgb.predict(X_test_final_scaled),
-        final_cb.predict(X_test_final_scaled),
-        final_ridge.predict(X_test_final_scaled)
-    ])
+    final_test_preds = np.column_stack(
+        [
+            final_xgb.predict(X_test_final_scaled),
+            final_cb.predict(X_test_final_scaled),
+            final_ridge.predict(X_test_final_scaled),
+        ]
+    )
     final_submissions_pred = np.dot(final_test_preds, best_weights)
     final_submissions_pred = np.clip(final_submissions_pred, 42000.0, 525000.0)
 
-    sub_df = pd.DataFrame({
-        'Id': np.arange(1461, 1461 + len(final_submissions_pred)),
-        'SalePrice': final_submissions_pred
-    })
+    sub_df = pd.DataFrame({"Id": np.arange(1461, 1461 + len(final_submissions_pred)), "SalePrice": final_submissions_pred})
     sub_df.to_csv("submissions/submission.csv", index=False)
     print("[+] Successfully wrote finalized, un-leaked predictions to 'submissions/submission.csv'!")
 
-    intervals_df = pd.DataFrame({
-        'Id': sub_df['Id'],
-        'SalePrice': final_submissions_pred,
-        'LowerBound': test_lower_bound,
-        'UpperBound': test_upper_bound,
-        'IntervalWidth': interval_widths
-    })
+    intervals_df = pd.DataFrame(
+        {
+            "Id": sub_df["Id"],
+            "SalePrice": final_submissions_pred,
+            "LowerBound": test_lower_bound,
+            "UpperBound": test_upper_bound,
+            "IntervalWidth": interval_widths,
+        }
+    )
     intervals_df.to_csv("submissions/submission_with_intervals.csv", index=False)
     print("[+] Wrote calibrated conformal bounds to 'submissions/submission_with_intervals.csv'.")
+
 
 # ------------------------------------------------------------------------------
 # MAIN EXECUTION ROUTINE

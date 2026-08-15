@@ -48,10 +48,7 @@ def main():
     stats1 = pd.Series(y1).describe()
     stats2 = pd.Series(y2).describe()
 
-    stats_df = pd.DataFrame({
-        "GEM-ITH (Session 1)": stats1,
-        "Bifurcated (Session 2)": stats2
-    })
+    stats_df = pd.DataFrame({"GEM-ITH (Session 1)": stats1, "Bifurcated (Session 2)": stats2})
 
     print("\n--- Descriptive Statistics Comparison ---")
     print(stats_df.round(2))
@@ -60,6 +57,7 @@ def main():
     pearson_corr = np.corrcoef(y1, y2)[0, 1]
     # Spearman rank correlation
     from scipy.stats import spearmanr
+
     spearman_corr, _ = spearmanr(y1, y2)
 
     mapd = np.mean(np.abs(y1 - y2) / y1) * 100
@@ -79,6 +77,7 @@ def main():
     print(f"[*] Out-of-bounds in Bifurcated (clamped [42k, 525k]): {outliers_2}")
 
     print("\n=== Validation Complete ===")
+
 
 if __name__ == "__main__":
     main()

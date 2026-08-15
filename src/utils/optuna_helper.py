@@ -1,12 +1,10 @@
 import os
-import optuna
 from typing import Optional
 
-def setup_optuna_study(
-    study_name: str,
-    db_name: Optional[str] = None,
-    direction: str = "minimize"
-) -> optuna.Study:
+import optuna
+
+
+def setup_optuna_study(study_name: str, db_name: Optional[str] = None, direction: str = "minimize") -> optuna.Study:
     """
     Setup standard directories and create/load an Optuna study.
     If db_name is provided, it uses SQLite storage and creates
@@ -24,9 +22,6 @@ def setup_optuna_study(
             load_if_exists=True,
         )
     else:
-        study = optuna.create_study(
-            direction=direction,
-            study_name=study_name
-        )
+        study = optuna.create_study(direction=direction, study_name=study_name)
 
     return study

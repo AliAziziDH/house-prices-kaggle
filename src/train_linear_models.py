@@ -105,7 +105,6 @@ def main():
         model_elasticnet.fit(X_tr, y_tr)
         oof_elasticnet[val_idx] = model_elasticnet.predict(X_va)
 
-
     print("\nTRAINING 100% LINEAR MODELS...")
     global_mean_full = y_train_full.mean()
     neigh_sums_full = y_train_full.groupby(raw_neighborhoods).sum()
@@ -190,8 +189,6 @@ def main():
     )
     model_elasticnet_90.fit(X_train_90_enc, y_train_90)
 
-
-
     # Save test encodings
     X_test_linear_encoded = X_test_linear.copy()
     test_encodings = []
@@ -216,8 +213,6 @@ def main():
 
     X_test_linear_encoded.to_csv("./processed_data/X_test_linear.csv", index=False)
     X_calib_linear_encoded.to_csv("./processed_data/X_calib_linear.csv", index=False)
-
-
 
     from src.metrics import rmsle
 

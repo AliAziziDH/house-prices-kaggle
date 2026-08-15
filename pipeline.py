@@ -1,6 +1,7 @@
 import subprocess
 import sys
 
+
 def run_command(cmd):
     print(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd)
@@ -8,7 +9,8 @@ def run_command(cmd):
         print(f"Error executing {' '.join(cmd)}")
         sys.exit(result.returncode)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     commands = [
         ["python", "src/preprocess.py"],
         ["python", "src/optimize_xgboost.py"],
@@ -16,7 +18,7 @@ if __name__ == '__main__':
         ["python", "src/train_linear_models.py"],
         ["python", "src/find_ensemble_weights.py"],
         ["python", "src/ensemble.py"],
-        ["python", "src/portfolio_solver.py"]
+        ["python", "src/portfolio_solver.py"],
     ]
 
     for cmd in commands:

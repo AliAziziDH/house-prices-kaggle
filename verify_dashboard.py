@@ -1,5 +1,5 @@
-import sys
 from src.ui.app import load_data
+
 
 def main():
     df, app_mode = load_data()
@@ -9,5 +9,6 @@ def main():
     assert app_mode == "Production Mode", f"Expected 'Production Mode', got '{app_mode}'"
     print("✅ Dashboard transition verified successfully!")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

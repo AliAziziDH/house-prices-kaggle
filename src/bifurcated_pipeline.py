@@ -20,6 +20,7 @@ RANDOM_STATE = 42
 N_FOLDS = 10
 N_TRIALS = 50
 
+
 def get_neighborhood_ranks(df_train, df_transform):
     """
     Computes fold-local neighborhood ranks based on median SalePrice / TotalSF.
@@ -30,26 +31,27 @@ def get_neighborhood_ranks(df_train, df_transform):
     df_transform = df_transform.copy()
 
     # Calculate TotalSF safely
-    gr_liv_area_tr = df_train['GrLivArea'] if 'GrLivArea' in df_train.columns else 0
-    total_bsmt_sf_tr = df_train['TotalBsmtSF'].fillna(0) if 'TotalBsmtSF' in df_train.columns else 0
-    df_train['TotalSF_temp'] = gr_liv_area_tr + total_bsmt_sf_tr
+    gr_liv_area_tr = df_train["GrLivArea"] if "GrLivArea" in df_train.columns else 0
+    total_bsmt_sf_tr = df_train["TotalBsmtSF"].fillna(0) if "TotalBsmtSF" in df_train.columns else 0
+    df_train["TotalSF_temp"] = gr_liv_area_tr + total_bsmt_sf_tr
 
-    gr_liv_area_tf = df_transform['GrLivArea'] if 'GrLivArea' in df_transform.columns else 0
-    total_bsmt_sf_tf = df_transform['TotalBsmtSF'].fillna(0) if 'TotalBsmtSF' in df_transform.columns else 0
-    df_transform['TotalSF_temp'] = gr_liv_area_tf + total_bsmt_sf_tf
+    gr_liv_area_tf = df_transform["GrLivArea"] if "GrLivArea" in df_transform.columns else 0
+    total_bsmt_sf_tf = df_transform["TotalBsmtSF"].fillna(0) if "TotalBsmtSF" in df_transform.columns else 0
+    df_transform["TotalSF_temp"] = gr_liv_area_tf + total_bsmt_sf_tf
 
     # Calculate price per sqft
-    df_train['PricePerSF'] = df_train['SalePrice'] / df_train['TotalSF_temp'].replace(0, np.nan)
+    df_train["PricePerSF"] = df_train["SalePrice"] / df_train["TotalSF_temp"].replace(0, np.nan)
 
-    medians = df_train.groupby('Neighborhood')['PricePerSF'].median().sort_values()
-    rank_map = {neigh: i+1 for i, neigh in enumerate(medians.index)}
+    medians = df_train.groupby("Neighborhood")["PricePerSF"].median().sort_values()
+    rank_map = {neigh: i + 1 for i, neigh in enumerate(medians.index)}
 
     # Default to 13 (middle rank out of 25) for unseen
-    df_transform['Neighborhood'] = df_transform['Neighborhood'].map(rank_map).fillna(13).astype(int)
-    df_train['Neighborhood'] = df_train['Neighborhood'].map(rank_map).fillna(13).astype(int)
+    df_transform["Neighborhood"] = df_transform["Neighborhood"].map(rank_map).fillna(13).astype(int)
+    df_train["Neighborhood"] = df_train["Neighborhood"].map(rank_map).fillna(13).astype(int)
 
-    df_transform = df_transform.drop(columns=['TotalSF_temp'], errors='ignore')
+    df_transform = df_transform.drop(columns=["TotalSF_temp"], errors="ignore")
     return df_transform
+
 
 def objective_xgb(trial, train_full):
     params = {
@@ -75,11 +77,11 @@ def objective_xgb(trial, train_full):
         tr = get_neighborhood_ranks(tr, tr)
 
         transformer = AmesDataTransformer(vif_prune=False)
-        X_tr = transformer.fit_transform(tr.drop(columns=['Id', 'SalePrice']))
-        X_va = transformer.transform(va.drop(columns=['Id', 'SalePrice']))
+        X_tr = transformer.fit_transform(tr.drop(columns=["Id", "SalePrice"]))
+        X_va = transformer.transform(va.drop(columns=["Id", "SalePrice"]))
 
-        y_tr = np.log1p(tr['SalePrice'])
-        y_va = np.log1p(va['SalePrice'])
+        y_tr = np.log1p(tr["SalePrice"])
+        y_va = np.log1p(va["SalePrice"])
 
         model.fit(X_tr, y_tr)
         preds = np.expm1(model.predict(X_va))
@@ -111,11 +113,11 @@ def objective_cat(trial, train_full):
         tr = get_neighborhood_ranks(tr, tr)
 
         transformer = AmesDataTransformer(vif_prune=False)
-        X_tr = transformer.fit_transform(tr.drop(columns=['Id', 'SalePrice']))
-        X_va = transformer.transform(va.drop(columns=['Id', 'SalePrice']))
+        X_tr = transformer.fit_transform(tr.drop(columns=["Id", "SalePrice"]))
+        X_va = transformer.transform(va.drop(columns=["Id", "SalePrice"]))
 
-        y_tr = np.log1p(tr['SalePrice'])
-        y_va = np.log1p(va['SalePrice'])
+        y_tr = np.log1p(tr["SalePrice"])
+        y_va = np.log1p(va["SalePrice"])
 
         # Identify categorical features
         cat_features = X_tr.select_dtypes(include=["object", "str", "category"]).columns.tolist()
@@ -168,7 +170,7 @@ def main():
     oof_cat = np.zeros(len(train_full))
     oof_ridge = np.zeros(len(train_full))
 
-    y_full = train_full['SalePrice'].values
+    y_full = train_full["SalePrice"].values
     y_full_log = np.log1p(y_full)
 
     xgb_base = xgb.XGBRegressor(**best_xgb_params)
@@ -177,8 +179,7 @@ def main():
     alphas_ridge = np.logspace(-3, 3, 50)
     ridge_base = make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5))
     ridge_model = TransformedTargetRegressor(
-        regressor=ridge_base,
-        transformer=QuantileTransformer(n_quantiles=900, output_distribution='normal')
+        regressor=ridge_base, transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal")
     )
 
     for fold, (tr_idx, va_idx) in enumerate(kf10.split(train_full)):
@@ -191,34 +192,33 @@ def main():
 
         # Linear models use a different target encoding with smoothing parameter m=20
         m = 20
-        global_mean = tr['SalePrice'].mean()
-        neigh_sums = tr.groupby('Neighborhood')['SalePrice'].sum()
-        neigh_counts = tr.groupby('Neighborhood')['SalePrice'].count()
+        global_mean = tr["SalePrice"].mean()
+        neigh_sums = tr.groupby("Neighborhood")["SalePrice"].sum()
+        neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
 
         tr_linear = tr.copy()
         loo_encodings = []
-        for n, y_i in zip(tr['Neighborhood'], tr['SalePrice']):
+        for n, y_i in zip(tr["Neighborhood"], tr["SalePrice"]):
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
             enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
             loo_encodings.append(enc)
-        tr_linear['Neighborhood'] = loo_encodings
+        tr_linear["Neighborhood"] = loo_encodings
 
         va_linear = va.copy()
         val_encodings = []
-        for n in va['Neighborhood']:
+        for n in va["Neighborhood"]:
             sum_c = neigh_sums.get(n, 0)
             n_c = neigh_counts.get(n, 0)
             enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
             val_encodings.append(enc)
-        va_linear['Neighborhood'] = val_encodings
-
+        va_linear["Neighborhood"] = val_encodings
 
         # 2. Preprocessing Streams
         # Tree Stream (No VIF Prune)
         tree_tf = AmesDataTransformer(vif_prune=False)
-        X_tr_tree = tree_tf.fit_transform(tr_tree.drop(columns=['Id', 'SalePrice']))
-        X_va_tree = tree_tf.transform(va_tree.drop(columns=['Id', 'SalePrice']))
+        X_tr_tree = tree_tf.fit_transform(tr_tree.drop(columns=["Id", "SalePrice"]))
+        X_va_tree = tree_tf.transform(va_tree.drop(columns=["Id", "SalePrice"]))
 
         cat_features = X_tr_tree.select_dtypes(include=["object", "str"]).columns.tolist()
         for col in cat_features:
@@ -227,10 +227,10 @@ def main():
 
         # Linear Stream (VIF Prune)
         linear_tf = AmesDataTransformer(vif_prune=True)
-        X_tr_linear = linear_tf.fit_transform(tr_linear.drop(columns=['Id', 'SalePrice']))
-        X_va_linear = linear_tf.transform(va_linear.drop(columns=['Id', 'SalePrice']))
+        X_tr_linear = linear_tf.fit_transform(tr_linear.drop(columns=["Id", "SalePrice"]))
+        X_va_linear = linear_tf.transform(va_linear.drop(columns=["Id", "SalePrice"]))
 
-        y_tr = tr['SalePrice'].values
+        y_tr = tr["SalePrice"].values
         y_tr_log = np.log1p(y_tr)
 
         # 3. Fitting & Predicting
@@ -283,49 +283,48 @@ def main():
     for i, name in enumerate(model_names):
         print(f"  {name}: {best_weights[i]:.4f}")
 
-
     print("\n--- Calculating Conformal Bounds (90/10 Split) ---")
     # 1. 90% Fold-local Neighborhood Ranking
     calib_tree = get_neighborhood_ranks(train_90, calib_10)
     train_90_tree = get_neighborhood_ranks(train_90, train_90)
 
     # Linear Encoding for 90/10
-    global_mean_90 = train_90['SalePrice'].mean()
-    neigh_sums_90 = train_90.groupby('Neighborhood')['SalePrice'].sum()
-    neigh_counts_90 = train_90.groupby('Neighborhood')['SalePrice'].count()
+    global_mean_90 = train_90["SalePrice"].mean()
+    neigh_sums_90 = train_90.groupby("Neighborhood")["SalePrice"].sum()
+    neigh_counts_90 = train_90.groupby("Neighborhood")["SalePrice"].count()
 
     train_90_linear = train_90.copy()
     encodings_90 = []
-    for n, y_i in zip(train_90['Neighborhood'], train_90['SalePrice']):
+    for n, y_i in zip(train_90["Neighborhood"], train_90["SalePrice"]):
         sum_c = neigh_sums_90.get(n, 0)
         n_c = neigh_counts_90.get(n, 0)
         enc = (sum_c - y_i + m * global_mean_90) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_90
         encodings_90.append(enc)
-    train_90_linear['Neighborhood'] = encodings_90
+    train_90_linear["Neighborhood"] = encodings_90
 
     calib_linear = calib_10.copy()
     calib_encodings = []
-    for n in calib_10['Neighborhood']:
+    for n in calib_10["Neighborhood"]:
         sum_c = neigh_sums_90.get(n, 0)
         n_c = neigh_counts_90.get(n, 0)
         enc = (sum_c + m * global_mean_90) / (n_c + m) if (n_c + m) > 0 else global_mean_90
         calib_encodings.append(enc)
-    calib_linear['Neighborhood'] = calib_encodings
+    calib_linear["Neighborhood"] = calib_encodings
 
     # 2. Transform 90/10
     tree_tf_90 = AmesDataTransformer(vif_prune=False)
-    X_tr90_tree = tree_tf_90.fit_transform(train_90_tree.drop(columns=['Id', 'SalePrice']))
-    X_ca_tree = tree_tf_90.transform(calib_tree.drop(columns=['Id', 'SalePrice']))
+    X_tr90_tree = tree_tf_90.fit_transform(train_90_tree.drop(columns=["Id", "SalePrice"]))
+    X_ca_tree = tree_tf_90.transform(calib_tree.drop(columns=["Id", "SalePrice"]))
 
     for col in cat_features:
         X_tr90_tree[col] = X_tr90_tree[col].fillna("Missing").astype(str)
         X_ca_tree[col] = X_ca_tree[col].fillna("Missing").astype(str)
 
     linear_tf_90 = AmesDataTransformer(vif_prune=True)
-    X_tr90_linear = linear_tf_90.fit_transform(train_90_linear.drop(columns=['Id', 'SalePrice']))
-    X_ca_linear = linear_tf_90.transform(calib_linear.drop(columns=['Id', 'SalePrice']))
+    X_tr90_linear = linear_tf_90.fit_transform(train_90_linear.drop(columns=["Id", "SalePrice"]))
+    X_ca_linear = linear_tf_90.transform(calib_linear.drop(columns=["Id", "SalePrice"]))
 
-    y_tr90 = train_90['SalePrice'].values
+    y_tr90 = train_90["SalePrice"].values
     y_tr90_log = np.log1p(y_tr90)
 
     xgb_90 = clone(xgb_base)
@@ -340,14 +339,13 @@ def main():
     ridge_90.fit(X_tr90_linear, y_tr90)
     calib_ridge_log = np.log1p(np.clip(ridge_90.predict(X_ca_linear), 1, None))
 
-    calib_ensemble_log = (best_weights[0] * calib_xgb_log +
-                          best_weights[1] * calib_cat_log +
-                          best_weights[2] * calib_ridge_log)
+    calib_ensemble_log = (
+        best_weights[0] * calib_xgb_log + best_weights[1] * calib_cat_log + best_weights[2] * calib_ridge_log
+    )
 
-    y_calib_log = np.log1p(calib_10['SalePrice'].values)
+    y_calib_log = np.log1p(calib_10["SalePrice"].values)
     residuals = compute_non_conformity_scores(y_calib_log, calib_ensemble_log)
     q = compute_empirical_quantile(residuals, alpha=0.05)
-
 
     print("\n--- Training 100% Final Models & Predicting Test ---")
     # 1. 100% Fold-local Neighborhood Ranking (Trees)
@@ -355,40 +353,40 @@ def main():
     train_full_tree = get_neighborhood_ranks(train_full, train_full)
 
     # 100% Linear Encoding
-    global_mean_100 = train_full['SalePrice'].mean()
-    neigh_sums_100 = train_full.groupby('Neighborhood')['SalePrice'].sum()
-    neigh_counts_100 = train_full.groupby('Neighborhood')['SalePrice'].count()
+    global_mean_100 = train_full["SalePrice"].mean()
+    neigh_sums_100 = train_full.groupby("Neighborhood")["SalePrice"].sum()
+    neigh_counts_100 = train_full.groupby("Neighborhood")["SalePrice"].count()
 
     train_full_linear = train_full.copy()
     encodings_100 = []
-    for n, y_i in zip(train_full['Neighborhood'], train_full['SalePrice']):
+    for n, y_i in zip(train_full["Neighborhood"], train_full["SalePrice"]):
         sum_c = neigh_sums_100.get(n, 0)
         n_c = neigh_counts_100.get(n, 0)
         enc = (sum_c - y_i + m * global_mean_100) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_100
         encodings_100.append(enc)
-    train_full_linear['Neighborhood'] = encodings_100
+    train_full_linear["Neighborhood"] = encodings_100
 
     test_linear = test.copy()
     test_encodings = []
-    for n in test['Neighborhood']:
+    for n in test["Neighborhood"]:
         sum_c = neigh_sums_100.get(n, 0)
         n_c = neigh_counts_100.get(n, 0)
         enc = (sum_c + m * global_mean_100) / (n_c + m) if (n_c + m) > 0 else global_mean_100
         test_encodings.append(enc)
-    test_linear['Neighborhood'] = test_encodings
+    test_linear["Neighborhood"] = test_encodings
 
     # 2. Transform 100%
     tree_tf_100 = AmesDataTransformer(vif_prune=False)
-    X_tr100_tree = tree_tf_100.fit_transform(train_full_tree.drop(columns=['Id', 'SalePrice']))
-    X_te_tree = tree_tf_100.transform(test_tree.drop(columns=['Id']))
+    X_tr100_tree = tree_tf_100.fit_transform(train_full_tree.drop(columns=["Id", "SalePrice"]))
+    X_te_tree = tree_tf_100.transform(test_tree.drop(columns=["Id"]))
 
     for col in cat_features:
         X_tr100_tree[col] = X_tr100_tree[col].fillna("Missing").astype(str)
         X_te_tree[col] = X_te_tree[col].fillna("Missing").astype(str)
 
     linear_tf_100 = AmesDataTransformer(vif_prune=True)
-    X_tr100_linear = linear_tf_100.fit_transform(train_full_linear.drop(columns=['Id', 'SalePrice']))
-    X_te_linear = linear_tf_100.transform(test_linear.drop(columns=['Id']))
+    X_tr100_linear = linear_tf_100.fit_transform(train_full_linear.drop(columns=["Id", "SalePrice"]))
+    X_te_linear = linear_tf_100.transform(test_linear.drop(columns=["Id"]))
 
     # 3. Fit 100%
     xgb_full = clone(xgb_base)
@@ -403,9 +401,7 @@ def main():
     ridge_full.fit(X_tr100_linear, y_full)
     test_ridge_log = np.log1p(np.clip(ridge_full.predict(X_te_linear), 1, None))
 
-    test_ensemble_log = (best_weights[0] * test_xgb_log +
-                         best_weights[1] * test_cat_log +
-                         best_weights[2] * test_ridge_log)
+    test_ensemble_log = best_weights[0] * test_xgb_log + best_weights[1] * test_cat_log + best_weights[2] * test_ridge_log
 
     y_pred_point, lower_bound, upper_bound = compute_prediction_intervals(
         test_ensemble_log, q, min_physical_price=42000.0, max_physical_price=525000.0
@@ -417,15 +413,13 @@ def main():
     sub = pd.DataFrame({"Id": test["Id"], "SalePrice": y_pred_point})
     sub.to_csv("submissions/submission_bifurcated.csv", index=False)
 
-    sub_int = pd.DataFrame({
-        "Id": test["Id"],
-        "SalePrice": y_pred_point,
-        "SalePrice_Lower": lower_bound,
-        "SalePrice_Upper": upper_bound
-    })
+    sub_int = pd.DataFrame(
+        {"Id": test["Id"], "SalePrice": y_pred_point, "SalePrice_Lower": lower_bound, "SalePrice_Upper": upper_bound}
+    )
     sub_int.to_csv("submissions/submission_with_intervals_bifurcated.csv", index=False)
 
     print("\n✅ Bifurcated Pipeline Complete! Submissions saved.")
+
 
 if __name__ == "__main__":
     main()
