@@ -1,21 +1,21 @@
 import os
-import joblib
+
 import numpy as np
-import pandas as pd
 import optuna
+import pandas as pd
 import xgboost as xgb
 from catboost import CatBoostRegressor
-from sklearn.linear_model import RidgeCV
-from sklearn.compose import TransformedTargetRegressor
-from sklearn.preprocessing import QuantileTransformer, RobustScaler
-from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import KFold, train_test_split
-from sklearn.base import clone
 from scipy.optimize import minimize
+from sklearn.base import clone
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.linear_model import RidgeCV
+from sklearn.model_selection import KFold, train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import QuantileTransformer, RobustScaler
 
-from src.preprocess import AmesDataTransformer
-from src.metrics import rmsle
 from src.conformal import compute_empirical_quantile, compute_non_conformity_scores, compute_prediction_intervals
+from src.metrics import rmsle
+from src.preprocess import AmesDataTransformer
 
 RANDOM_STATE = 42
 N_FOLDS = 10
@@ -55,7 +55,7 @@ def get_neighborhood_ranks(df_train, df_transform):
 def objective_xgb(trial, train_full):
     params = {
         "n_estimators": trial.suggest_int("n_estimators", 100, 1000, step=100),
-        "max_depth": trial.suggest_int("max_depth", 1, 5),
+        "max_depth": trial.suggest_int("max_depth", 1, 3),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
@@ -92,7 +92,7 @@ def objective_xgb(trial, train_full):
 def objective_cat(trial, train_full):
     params = {
         "iterations": trial.suggest_int("iterations", 100, 1000, step=100),
-        "depth": trial.suggest_int("depth", 1, 5),
+        "depth": trial.suggest_int("depth", 1, 3),
         "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
         "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 3.0, 10.0),
         "subsample": trial.suggest_float("subsample", 0.6, 1.0),

@@ -133,3 +133,52 @@ def test_pyomo_portfolio_solver():
     total_risk = selected["Conformal_Downside"].sum()
     # allow for a tiny floating point tolerance
     assert total_risk <= (theta * total_spend) + 1e-6
+
+def test_get_neighborhood_ranks():
+    from src.bifurcated_pipeline import get_neighborhood_ranks
+    train_data = pd.DataFrame(
+        {
+            "Neighborhood": ["A", "B", "C"],
+            "SalePrice": [100000, 200000, 300000],
+            "GrLivArea": [1000, 1000, 1000]
+        }
+    )
+    test_data = pd.DataFrame(
+        {
+            "Neighborhood": ["A", "B", "D"], # 'D' is unseen
+            "GrLivArea": [1000, 1000, 1000]
+        }
+    )
+
+    transformed_test = get_neighborhood_ranks(train_data, test_data)
+
+    assert "Neighborhood" in transformed_test.columns
+    assert pd.api.types.is_numeric_dtype(transformed_test["Neighborhood"])
+    assert not transformed_test["Neighborhood"].isna().any()
+
+    # Check that unseen neighborhood gets mapped to 13
+    assert transformed_test.loc[2, "Neighborhood"] == 13
+
+def test_bifurcated_pipeline_end_to_end(monkeypatch):
+    import src.bifurcated_pipeline
+    monkeypatch.setattr(src.bifurcated_pipeline, "N_FOLDS", 2)
+    monkeypatch.setattr(src.bifurcated_pipeline, "N_TRIALS", 1)
+
+    try:
+        src.bifurcated_pipeline.main()
+    except Exception as e:
+        assert False, f"bifurcated_pipeline.py failed with exception: {e}"
+
+def test_bifurcated_predictions():
+    assert os.path.exists("./submissions/submission_with_intervals_bifurcated.csv"), "CSV artifact not found, run pipeline first!"
+    df = pd.read_csv("./submissions/submission_with_intervals_bifurcated.csv")
+    assert (df["SalePrice"] > 0).all()
+    assert (df["SalePrice_Lower"] >= 42000.0).all()
+    assert (df["SalePrice_Upper"] <= 525000.0).all()
+    assert (df["SalePrice_Lower"] <= df["SalePrice"]).all()
+    assert (df["SalePrice"] <= df["SalePrice_Upper"]).all()
+    assert df.shape[1] == 4
+    assert "Id" in df.columns
+    assert "SalePrice" in df.columns
+    assert "SalePrice_Lower" in df.columns
+    assert "SalePrice_Upper" in df.columns
