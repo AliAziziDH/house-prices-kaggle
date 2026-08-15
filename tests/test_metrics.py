@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+import pytest
 
 from src.metrics import rmsle
 
@@ -50,5 +52,27 @@ def test_rmsle_lists():
     """Test RMSLE works with standard python lists."""
     y_true = [1.0, 2.0, 3.0, 4.0]
     y_pred = [1.0, 2.0, 3.0, 4.0]
+    result = rmsle(y_true, y_pred)
+    assert np.isclose(result, 0.0)
+
+
+def test_rmsle_pandas_series():
+    """Test RMSLE works with pandas Series."""
+    y_true = pd.Series([1.0, 2.0, 3.0, 4.0])
+    y_pred = pd.Series([1.0, 2.0, 3.0, 4.0])
+    result = rmsle(y_true, y_pred)
+    assert np.isclose(result, 0.0)
+
+def test_rmsle_mismatched_lengths():
+    """Test RMSLE raises ValueError on mismatched lengths."""
+    y_true = np.array([1.0, 2.0, 3.0])
+    y_pred = np.array([1.0, 2.0])
+    with pytest.raises(ValueError):
+        rmsle(y_true, y_pred)
+
+def test_rmsle_large_values():
+    """Test RMSLE with very large values."""
+    y_true = np.array([1e6, 1e7])
+    y_pred = np.array([1e6, 1e7])
     result = rmsle(y_true, y_pred)
     assert np.isclose(result, 0.0)
