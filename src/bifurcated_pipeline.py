@@ -197,22 +197,24 @@ def main():
         neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
 
         tr_linear = tr.copy()
-        loo_encodings = []
-        for n, y_i in zip(tr["Neighborhood"], tr["SalePrice"]):
-            sum_c = neigh_sums.get(n, 0)
-            n_c = neigh_counts.get(n, 0)
-            enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
-            loo_encodings.append(enc)
-        tr_linear["Neighborhood"] = loo_encodings
+
+        n_c_tr = tr["Neighborhood"].map(neigh_counts).fillna(0)
+        sum_c_tr = tr["Neighborhood"].map(neigh_sums).fillna(0)
+
+        denominator_tr = n_c_tr - 1 + m
+        numerator_tr = sum_c_tr - tr["SalePrice"] + m * global_mean
+
+        tr_linear["Neighborhood"] = np.where(denominator_tr > 0, numerator_tr / denominator_tr, global_mean)
 
         va_linear = va.copy()
-        val_encodings = []
-        for n in va["Neighborhood"]:
-            sum_c = neigh_sums.get(n, 0)
-            n_c = neigh_counts.get(n, 0)
-            enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
-            val_encodings.append(enc)
-        va_linear["Neighborhood"] = val_encodings
+
+        n_c_va = va["Neighborhood"].map(neigh_counts).fillna(0)
+        sum_c_va = va["Neighborhood"].map(neigh_sums).fillna(0)
+
+        denominator_va = n_c_va + m
+        numerator_va = sum_c_va + m * global_mean
+
+        va_linear["Neighborhood"] = np.where(denominator_va > 0, numerator_va / denominator_va, global_mean)
 
         # 2. Preprocessing Streams
         # Tree Stream (No VIF Prune)
@@ -294,22 +296,24 @@ def main():
     neigh_counts_90 = train_90.groupby("Neighborhood")["SalePrice"].count()
 
     train_90_linear = train_90.copy()
-    encodings_90 = []
-    for n, y_i in zip(train_90["Neighborhood"], train_90["SalePrice"]):
-        sum_c = neigh_sums_90.get(n, 0)
-        n_c = neigh_counts_90.get(n, 0)
-        enc = (sum_c - y_i + m * global_mean_90) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_90
-        encodings_90.append(enc)
-    train_90_linear["Neighborhood"] = encodings_90
+
+    n_c_tr90 = train_90["Neighborhood"].map(neigh_counts_90).fillna(0)
+    sum_c_tr90 = train_90["Neighborhood"].map(neigh_sums_90).fillna(0)
+
+    denominator_tr90 = n_c_tr90 - 1 + m
+    numerator_tr90 = sum_c_tr90 - train_90["SalePrice"] + m * global_mean_90
+
+    train_90_linear["Neighborhood"] = np.where(denominator_tr90 > 0, numerator_tr90 / denominator_tr90, global_mean_90)
 
     calib_linear = calib_10.copy()
-    calib_encodings = []
-    for n in calib_10["Neighborhood"]:
-        sum_c = neigh_sums_90.get(n, 0)
-        n_c = neigh_counts_90.get(n, 0)
-        enc = (sum_c + m * global_mean_90) / (n_c + m) if (n_c + m) > 0 else global_mean_90
-        calib_encodings.append(enc)
-    calib_linear["Neighborhood"] = calib_encodings
+
+    n_c_ca = calib_10["Neighborhood"].map(neigh_counts_90).fillna(0)
+    sum_c_ca = calib_10["Neighborhood"].map(neigh_sums_90).fillna(0)
+
+    denominator_ca = n_c_ca + m
+    numerator_ca = sum_c_ca + m * global_mean_90
+
+    calib_linear["Neighborhood"] = np.where(denominator_ca > 0, numerator_ca / denominator_ca, global_mean_90)
 
     # 2. Transform 90/10
     tree_tf_90 = AmesDataTransformer(vif_prune=False)
@@ -358,22 +362,24 @@ def main():
     neigh_counts_100 = train_full.groupby("Neighborhood")["SalePrice"].count()
 
     train_full_linear = train_full.copy()
-    encodings_100 = []
-    for n, y_i in zip(train_full["Neighborhood"], train_full["SalePrice"]):
-        sum_c = neigh_sums_100.get(n, 0)
-        n_c = neigh_counts_100.get(n, 0)
-        enc = (sum_c - y_i + m * global_mean_100) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_100
-        encodings_100.append(enc)
-    train_full_linear["Neighborhood"] = encodings_100
+
+    n_c_tr100 = train_full["Neighborhood"].map(neigh_counts_100).fillna(0)
+    sum_c_tr100 = train_full["Neighborhood"].map(neigh_sums_100).fillna(0)
+
+    denominator_tr100 = n_c_tr100 - 1 + m
+    numerator_tr100 = sum_c_tr100 - train_full["SalePrice"] + m * global_mean_100
+
+    train_full_linear["Neighborhood"] = np.where(denominator_tr100 > 0, numerator_tr100 / denominator_tr100, global_mean_100)
 
     test_linear = test.copy()
-    test_encodings = []
-    for n in test["Neighborhood"]:
-        sum_c = neigh_sums_100.get(n, 0)
-        n_c = neigh_counts_100.get(n, 0)
-        enc = (sum_c + m * global_mean_100) / (n_c + m) if (n_c + m) > 0 else global_mean_100
-        test_encodings.append(enc)
-    test_linear["Neighborhood"] = test_encodings
+
+    n_c_te = test["Neighborhood"].map(neigh_counts_100).fillna(0)
+    sum_c_te = test["Neighborhood"].map(neigh_sums_100).fillna(0)
+
+    denominator_te = n_c_te + m
+    numerator_te = sum_c_te + m * global_mean_100
+
+    test_linear["Neighborhood"] = np.where(denominator_te > 0, numerator_te / denominator_te, global_mean_100)
 
     # 2. Transform 100%
     tree_tf_100 = AmesDataTransformer(vif_prune=False)
