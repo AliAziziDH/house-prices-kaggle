@@ -165,7 +165,7 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
 
         for train_idx, val_idx in kf.split(X_train):
             X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
-            y_tr, y_val = y[train_idx], y[val_idx]
+            y_tr, _y_val = y[train_idx], y[val_idx]
 
             encoder = FoldLocalTargetEncoder()
             encoder.fit(X_tr, y_tr)
@@ -229,9 +229,7 @@ def run_gem_ith_optimization(X_train, y, n_splits=5, n_trials=30):
                 "cb_depth": cb_depth,
                 "cb_l2": cb_l2,
             }
-            print(
-                f" [Trial {trial:02d}/{n_trials}] Found Better Joint Params! RMSLE: {best_rmsle:.5f} | Weights: {best_weights}"
-            )
+            print(f" [Trial {trial:02d}/{n_trials}] Found Better Params! RMSLE: {best_rmsle:.5f} | Weights: {best_weights}")
 
     print(f"\n[+] GEM-ITH Optimization Complete! Best OOF RMSLE: {best_rmsle:.5f}")
     return best_params, best_weights

@@ -63,12 +63,14 @@ def test_rmsle_pandas_series():
     result = rmsle(y_true, y_pred)
     assert np.isclose(result, 0.0)
 
+
 def test_rmsle_mismatched_lengths():
     """Test RMSLE raises ValueError on mismatched lengths."""
     y_true = np.array([1.0, 2.0, 3.0])
     y_pred = np.array([1.0, 2.0])
     with pytest.raises(ValueError):
         rmsle(y_true, y_pred)
+
 
 def test_rmsle_large_values():
     """Test RMSLE with very large values."""
