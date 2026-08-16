@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pandas as pd
 
-from src.models.base import save_oof_predictions
+from src.models.base import CVConfig, save_oof_predictions
 from src.models.catboost_model import train_catboost_cv
 from src.models.linear_model import train_linear_cv
 from src.models.xgboost_model import train_xgboost_cv
@@ -52,7 +52,7 @@ def main():
 
     if args.model in ["linear", "all"]:
         print("\n--- Training Linear (Lasso) ---")
-        linear_res = train_linear_cv(X_raw, y_raw, model_type="lasso")
+        linear_res = train_linear_cv(X_raw, y_raw, config=CVConfig(model_type="lasso"))
         print(f"Linear (Lasso) Overall OOF RMSLE: {linear_res['overall_rmsle']:.6f}")
         save_oof_predictions("linear", linear_res["oof_preds"], train_ids)
 

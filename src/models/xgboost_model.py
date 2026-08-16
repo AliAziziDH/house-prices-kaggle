@@ -1,6 +1,8 @@
+from typing import Optional
+
 from xgboost import XGBRegressor
 
-from src.models.base import RANDOM_STATE, run_cv_experiment
+from src.models.base import RANDOM_STATE, CVConfig, run_cv_experiment
 
 DEFAULT_XGB_PARAMS = {
     "n_estimators": 500,
@@ -14,18 +16,23 @@ DEFAULT_XGB_PARAMS = {
 }
 
 
-def train_xgboost_cv(X_raw, y_raw, params=None, n_folds=5, seed=RANDOM_STATE):
+def train_xgboost_cv(X_raw, y_raw, config: Optional[CVConfig] = None):
     """Train XGBoost using leak-free CV."""
-    model_params = params or DEFAULT_XGB_PARAMS
+    config = config or CVConfig()
+    model_params = config.params or DEFAULT_XGB_PARAMS
 
     def model_factory(fold_idx):
-        return XGBRegressor(**model_params)
+        # XGBoost handles randomness internally via random_state in params, but let's override with fold seed if needed
+        p = model_params.copy()
+        if "random_state" in p:
+            p["random_state"] = config.seed + fold_idx
+        return XGBRegressor(**p)
 
     return run_cv_experiment(
         model_factory=model_factory,
         X_raw=X_raw,
         y_raw=y_raw,
-        n_folds=n_folds,
-        seed=seed,
-        use_raw_features=False,
+        n_folds=config.n_folds,
+        seed=config.seed,
+        use_raw_features=config.use_raw,
     )
