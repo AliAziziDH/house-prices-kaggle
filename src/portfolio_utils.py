@@ -26,19 +26,19 @@ def solve_greedy(df: pd.DataFrame, budget: float, theta: float) -> pd.DataFrame:
     current_spend = 0.0
     current_risk = 0.0
 
-    for i, row in df_sorted.iterrows():
+    for row in df_sorted.itertuples(index=False):
         # Check budget
-        if current_spend + row["Asking_Price"] > budget:
+        if current_spend + row.Asking_Price > budget:
             continue
 
         # Check downside conformal risk constraint:
         # Sum(A_i - L_i) <= theta * Sum(A_i)
-        if current_risk + row["Downside_Risk"] > theta * (current_spend + row["Asking_Price"]):
+        if current_risk + row.Downside_Risk > theta * (current_spend + row.Asking_Price):
             continue
 
-        selected_idx.append(row["index"])
-        current_spend += row["Asking_Price"]
-        current_risk += row["Downside_Risk"]
+        selected_idx.append(row.index)
+        current_spend += row.Asking_Price
+        current_risk += row.Downside_Risk
 
     df["Selected_Fraction"] = 0.0
     df.loc[selected_idx, "Selected_Fraction"] = 1.0
