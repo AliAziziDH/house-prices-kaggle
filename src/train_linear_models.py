@@ -19,6 +19,22 @@ RANDOM_STATE = 42
 N_FOLDS = 5
 
 
+def vectorized_target_encode(
+    neighborhoods, y=None, neigh_sums=None, neigh_counts=None, global_mean=None, m=20, leave_one_out=False
+):
+    import numpy as np
+
+    mapped_sums = neighborhoods.map(neigh_sums).fillna(0)
+    mapped_counts = neighborhoods.map(neigh_counts).fillna(0)
+
+    if leave_one_out:
+        denom = mapped_counts - 1 + m
+        return np.where(denom > 0, (mapped_sums - y + m * global_mean) / denom, global_mean)
+    else:
+        denom = mapped_counts + m
+        return np.where(denom > 0, (mapped_sums + m * global_mean) / denom, global_mean)
+
+
 def main():
     print("=" * 60)
     print("LOADING PROCESSED DATA FOR LINEAR MODELS")
@@ -67,21 +83,13 @@ def main():
         neigh_counts = train_neighborhoods.value_counts()
         m = 20
 
-        loo_encodings = []
-        for n, y_i in zip(train_neighborhoods, y_tr):
-            sum_c = neigh_sums.get(n, 0)
-            n_c = neigh_counts.get(n, 0)
-            enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
-            loo_encodings.append(enc)
-        X_tr["Neighborhood"] = loo_encodings
+        X_tr["Neighborhood"] = vectorized_target_encode(
+            train_neighborhoods, y_tr, neigh_sums, neigh_counts, global_mean, m, leave_one_out=True
+        )
 
-        val_encodings = []
-        for n in val_neighborhoods:
-            sum_c = neigh_sums.get(n, 0)
-            n_c = neigh_counts.get(n, 0)
-            enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
-            val_encodings.append(enc)
-        X_va["Neighborhood"] = val_encodings
+        X_va["Neighborhood"] = vectorized_target_encode(
+            val_neighborhoods, None, neigh_sums, neigh_counts, global_mean, m, leave_one_out=False
+        )
 
         base_lasso = make_pipeline(
             RobustScaler(), LassoCV(alphas=alphas_lasso, cv=5, random_state=RANDOM_STATE, max_iter=2000, n_jobs=-1)
@@ -111,13 +119,9 @@ def main():
     neigh_counts_full = raw_neighborhoods.value_counts()
 
     X_train_full_enc = X_train_full.copy()
-    full_encodings = []
-    for n, y_i in zip(raw_neighborhoods, y_train_full):
-        sum_c = neigh_sums_full.get(n, 0)
-        n_c = neigh_counts_full.get(n, 0)
-        enc = (sum_c - y_i + m * global_mean_full) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_full
-        full_encodings.append(enc)
-    X_train_full_enc["Neighborhood"] = full_encodings
+    X_train_full_enc["Neighborhood"] = vectorized_target_encode(
+        raw_neighborhoods, y_train_full, neigh_sums_full, neigh_counts_full, global_mean_full, m, leave_one_out=True
+    )
 
     model_lasso_full = TransformedTargetRegressor(
         regressor=make_pipeline(
@@ -155,13 +159,9 @@ def main():
     neigh_counts_90 = raw_neighborhoods_proper.value_counts()
 
     X_train_90_enc = X_train_90.copy()
-    encodings_90 = []
-    for n, y_i in zip(raw_neighborhoods_proper, y_train_90):
-        sum_c = neigh_sums_90.get(n, 0)
-        n_c = neigh_counts_90.get(n, 0)
-        enc = (sum_c - y_i + m * global_mean_90) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean_90
-        encodings_90.append(enc)
-    X_train_90_enc["Neighborhood"] = encodings_90
+    X_train_90_enc["Neighborhood"] = vectorized_target_encode(
+        raw_neighborhoods_proper, y_train_90, neigh_sums_90, neigh_counts_90, global_mean_90, m, leave_one_out=True
+    )
 
     model_lasso_90 = TransformedTargetRegressor(
         regressor=make_pipeline(
@@ -191,25 +191,17 @@ def main():
 
     # Save test encodings
     X_test_linear_encoded = X_test_linear.copy()
-    test_encodings = []
-    for n in test_neighborhoods:
-        sum_c = neigh_sums_full.get(n, 0)
-        n_c = neigh_counts_full.get(n, 0)
-        enc = (sum_c + m * global_mean_full) / (n_c + m) if (n_c + m) > 0 else global_mean_full
-        test_encodings.append(enc)
-    X_test_linear_encoded["Neighborhood"] = test_encodings
+    X_test_linear_encoded["Neighborhood"] = vectorized_target_encode(
+        test_neighborhoods, None, neigh_sums_full, neigh_counts_full, global_mean_full, m, leave_one_out=False
+    )
 
     X_calib_linear = pd.read_csv("./processed_data/X_calib_linear.csv")
     calib_neighborhoods = pd.read_csv("./processed_data/X_calib_raw.csv")["Neighborhood"]
 
     X_calib_linear_encoded = X_calib_linear.copy()
-    calib_encodings = []
-    for n in calib_neighborhoods:
-        sum_c = neigh_sums_90.get(n, 0)
-        n_c = neigh_counts_90.get(n, 0)
-        enc = (sum_c + m * global_mean_90) / (n_c + m) if (n_c + m) > 0 else global_mean_90
-        calib_encodings.append(enc)
-    X_calib_linear_encoded["Neighborhood"] = calib_encodings
+    X_calib_linear_encoded["Neighborhood"] = vectorized_target_encode(
+        calib_neighborhoods, None, neigh_sums_90, neigh_counts_90, global_mean_90, m, leave_one_out=False
+    )
 
     X_test_linear_encoded.to_csv("./processed_data/X_test_linear.csv", index=False)
     X_calib_linear_encoded.to_csv("./processed_data/X_calib_linear.csv", index=False)
