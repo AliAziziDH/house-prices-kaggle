@@ -86,7 +86,7 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def _transform_df(self, df):
+    def _handle_missing(self, df):
         df = df.copy()
 
         # 1. Garage features
@@ -95,18 +95,13 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             if col in df.columns:
                 df[col] = df[col].fillna("No Garage")
 
-        for col in ["GarageYrBlt", "GarageCars", "GarageArea"]:
+        garage_num_cols = ["GarageYrBlt", "GarageArea", "GarageCars"]
+        for col in garage_num_cols:
             if col in df.columns:
                 df[col] = df[col].fillna(0)
 
         # 2. Basement features
-        bsmt_cat_cols = [
-            "BsmtQual",
-            "BsmtCond",
-            "BsmtExposure",
-            "BsmtFinType1",
-            "BsmtFinType2",
-        ]
+        bsmt_cat_cols = ["BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2"]
         for col in bsmt_cat_cols:
             if col in df.columns:
                 df[col] = df[col].fillna("No Basement")
@@ -151,6 +146,11 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
             if col in df.columns:
                 df[col] = df[col].fillna(0)
 
+        return df
+
+    def _engineer_features(self, df):
+        df = df.copy()
+
         # 7. Feature engineering
         if all(c in df.columns for c in ["GrLivArea", "TotalBsmtSF"]):
             df["TotalSF"] = df["GrLivArea"] + df["TotalBsmtSF"]
@@ -174,6 +174,11 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
 
         if all(c in df.columns for c in ["YrSold", "GarageYrBlt"]):
             df["GarageAge"] = np.where(df["GarageYrBlt"] == 0, 0, df["YrSold"] - df["GarageYrBlt"])
+
+        return df
+
+    def _encode_categorical(self, df):
+        df = df.copy()
 
         # 8. Ordinal encoding
         quality_map = {"Po": 1, "Fa": 2, "TA": 3, "Gd": 4, "Ex": 5}
@@ -224,6 +229,16 @@ class AmesDataTransformer(BaseEstimator, TransformerMixin):
         nominal_cols = df.select_dtypes(include=["object", "string"]).columns.tolist()
         if nominal_cols:
             df = pd.get_dummies(df, columns=nominal_cols, drop_first=True)
+
+        return df
+
+    def _transform_df(self, df):
+        """
+        Apply identical transformations to a dataframe (train, test, or any split)
+        """
+        df = self._handle_missing(df)
+        df = self._engineer_features(df)
+        df = self._encode_categorical(df)
 
         # 10. VIF Enforcer: Drop highly collinear features
         if self.vif_prune:
