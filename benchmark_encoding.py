@@ -1,0 +1,111 @@
+import time
+import numpy as np
+import pandas as pd
+
+def simulate_data(n_samples=10000, n_categories=50):
+    np.random.seed(42)
+    neighborhoods = [f'N_{i}' for i in range(n_categories)]
+    df = pd.DataFrame({
+        'Neighborhood': np.random.choice(neighborhoods, size=n_samples),
+        'SalePrice': np.random.uniform(50000, 500000, size=n_samples)
+    })
+    return df
+
+def test_original_tr(tr, m=20):
+    global_mean = tr["SalePrice"].mean()
+    neigh_sums = tr.groupby("Neighborhood")["SalePrice"].sum()
+    neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
+
+    tr_linear = tr.copy()
+    loo_encodings = []
+    for n, y_i in zip(tr["Neighborhood"], tr["SalePrice"]):
+        sum_c = neigh_sums.get(n, 0)
+        n_c = neigh_counts.get(n, 0)
+        enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
+        loo_encodings.append(enc)
+    tr_linear["Neighborhood"] = loo_encodings
+    return tr_linear
+
+def test_vectorized_tr(tr, m=20):
+    global_mean = tr["SalePrice"].mean()
+    neigh_sums = tr.groupby("Neighborhood")["SalePrice"].transform('sum')
+    neigh_counts = tr.groupby("Neighborhood")["SalePrice"].transform('count')
+
+    tr_linear = tr.copy()
+    # If the original loops does this:
+    # enc = (sum_c - y_i + m * global_mean) / (n_c - 1 + m) if (n_c - 1 + m) > 0 else global_mean
+
+    denominator = neigh_counts - 1 + m
+    numerator = neigh_sums - tr["SalePrice"] + m * global_mean
+
+    encodings = np.where(denominator > 0, numerator / denominator, global_mean)
+    tr_linear["Neighborhood"] = encodings
+    return tr_linear
+
+def test_original_va(tr, va, m=20):
+    global_mean = tr["SalePrice"].mean()
+    neigh_sums = tr.groupby("Neighborhood")["SalePrice"].sum()
+    neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
+
+    va_linear = va.copy()
+    val_encodings = []
+    for n in va["Neighborhood"]:
+        sum_c = neigh_sums.get(n, 0)
+        n_c = neigh_counts.get(n, 0)
+        enc = (sum_c + m * global_mean) / (n_c + m) if (n_c + m) > 0 else global_mean
+        val_encodings.append(enc)
+    va_linear["Neighborhood"] = val_encodings
+    return va_linear
+
+def test_vectorized_va(tr, va, m=20):
+    global_mean = tr["SalePrice"].mean()
+    neigh_sums = tr.groupby("Neighborhood")["SalePrice"].sum()
+    neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
+
+    va_linear = va.copy()
+
+    sum_c = va["Neighborhood"].map(neigh_sums).fillna(0)
+    n_c = va["Neighborhood"].map(neigh_counts).fillna(0)
+
+    denominator = n_c + m
+    numerator = sum_c + m * global_mean
+
+    encodings = np.where(denominator > 0, numerator / denominator, global_mean)
+    va_linear["Neighborhood"] = encodings
+    return va_linear
+
+
+if __name__ == "__main__":
+    df = simulate_data(50000)
+    tr = df.iloc[:40000].copy()
+    va = df.iloc[40000:].copy()
+
+    # TR tests
+    start = time.time()
+    orig_tr_res = test_original_tr(tr)
+    t_orig_tr = time.time() - start
+
+    start = time.time()
+    vec_tr_res = test_vectorized_tr(tr)
+    t_vec_tr = time.time() - start
+
+    np.testing.assert_allclose(orig_tr_res["Neighborhood"], vec_tr_res["Neighborhood"])
+
+    # VA tests
+    start = time.time()
+    orig_va_res = test_original_va(tr, va)
+    t_orig_va = time.time() - start
+
+    start = time.time()
+    vec_va_res = test_vectorized_va(tr, va)
+    t_vec_va = time.time() - start
+
+    np.testing.assert_allclose(orig_va_res["Neighborhood"], vec_va_res["Neighborhood"])
+
+    print(f"TR Original: {t_orig_tr:.4f}s")
+    print(f"TR Vectorized: {t_vec_tr:.4f}s")
+    print(f"TR Speedup: {t_orig_tr / t_vec_tr:.2f}x")
+
+    print(f"VA Original: {t_orig_va:.4f}s")
+    print(f"VA Vectorized: {t_vec_va:.4f}s")
+    print(f"VA Speedup: {t_orig_va / t_vec_va:.2f}x")
