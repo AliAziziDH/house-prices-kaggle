@@ -35,6 +35,7 @@ src/ui/app.py
 src/utils/__init__.py
 src/utils/data_loading.py
 src/utils/optuna_helper.py
+tests/test_bifurcated_pipeline.py
 tests/test_conformal.py
 tests/test_diagnose.py
 tests/test_metrics.py
