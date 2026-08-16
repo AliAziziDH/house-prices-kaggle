@@ -1,4 +1,6 @@
 import os
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -38,15 +40,26 @@ RANDOM_STATE = 42
 N_FOLDS = 5
 
 
+@dataclass
+class CVConfig:
+    n_folds: int = 5
+    seed: int = 42
+    use_raw: bool = False
+    params: Optional[Dict[str, Any]] = None
+    model_type: Optional[str] = None
+
+
 def run_cv_experiment(
     model_factory,
     X_raw,
     y_raw,
-    n_folds=N_FOLDS,
-    seed=RANDOM_STATE,
-    use_raw_features=False,
+    config: Optional[CVConfig] = None,
     cat_features=None,
 ):
+    config = config or CVConfig()
+    n_folds = config.n_folds
+    seed = config.seed
+    use_raw_features = config.use_raw
     """
     Leak-free cross-validation runner.
     Fits AmesDataTransformer strictly on training folds and evaluates on validation folds.

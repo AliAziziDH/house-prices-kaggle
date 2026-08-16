@@ -39,3 +39,4 @@ tests/test_conformal.py
 tests/test_diagnose.py
 tests/test_metrics.py
 tests/test_pipeline.py
+tests/test_portfolio_utils.py

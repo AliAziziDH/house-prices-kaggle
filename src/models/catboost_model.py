@@ -1,6 +1,8 @@
+from typing import Optional
+
 from catboost import CatBoostRegressor
 
-from src.models.base import RANDOM_STATE, run_cv_experiment
+from src.models.base import RANDOM_STATE, CVConfig, run_cv_experiment
 
 DEFAULT_CAT_PARAMS = {
     "iterations": 1000,
@@ -14,25 +16,26 @@ DEFAULT_CAT_PARAMS = {
 }
 
 
-def train_catboost_cv(X_raw, y_raw, params=None, n_folds=5, seed=RANDOM_STATE, use_raw=False):
+def train_catboost_cv(X_raw, y_raw, config: Optional[CVConfig] = None):
     """Train CatBoost using leak-free CV."""
-    model_params = params or DEFAULT_CAT_PARAMS
+    config = config or CVConfig()
+    model_params = config.params or DEFAULT_CAT_PARAMS
 
     cat_features = None
-    if use_raw:
+    if config.use_raw:
         cat_features = X_raw.select_dtypes(include=["object", "string"]).columns.tolist()
 
     def model_factory(fold_idx):
         p = model_params.copy()
-        p["random_seed"] = seed + fold_idx
+        p["random_seed"] = config.seed + fold_idx
         return CatBoostRegressor(**p)
 
     return run_cv_experiment(
         model_factory=model_factory,
         X_raw=X_raw,
         y_raw=y_raw,
-        n_folds=n_folds,
-        seed=seed,
-        use_raw_features=use_raw,
+        n_folds=config.n_folds,
+        seed=config.seed,
+        use_raw_features=config.use_raw,
         cat_features=cat_features,
     )
