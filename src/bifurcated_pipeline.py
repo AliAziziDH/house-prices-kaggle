@@ -132,7 +132,7 @@ def objective_cat(trial, train_full):
     return np.mean(rmsle_scores)
 
 
-def main():
+def load_and_split_data():
     print("=" * 60)
     print("STARTING BIFURCATED MULTI-STREAM ENSEMBLE PIPELINE")
     print("=" * 60)
@@ -149,6 +149,10 @@ def main():
     train_90 = train_90.reset_index(drop=True)
     calib_10 = calib_10.reset_index(drop=True)
 
+    return train_full, train_90, calib_10, test
+
+
+def tune_models(train_full):
     from src.utils.optuna_helper import setup_optuna_study
 
     print("\n--- Tuning XGBoost ---")
@@ -163,6 +167,10 @@ def main():
     best_cat_params = study_cat.best_params
     best_cat_params.update({"random_seed": RANDOM_STATE, "verbose": False})
 
+    return best_xgb_params, best_cat_params
+
+
+def generate_oof_predictions(train_full, xgb_base, cat_base, ridge_model):
     print("\n--- Generating 10-Fold OOF Predictions ---")
     kf10 = KFold(n_splits=10, shuffle=True, random_state=RANDOM_STATE)
 
@@ -171,22 +179,15 @@ def main():
     oof_ridge = np.zeros(len(train_full))
 
     y_full = train_full["SalePrice"].values
-    y_full_log = np.log1p(y_full)
-
-    xgb_base = xgb.XGBRegressor(**best_xgb_params)
-    cat_base = CatBoostRegressor(**best_cat_params)
-
-    alphas_ridge = np.logspace(-3, 3, 50)
-    ridge_base = make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5))
-    ridge_model = TransformedTargetRegressor(
-        regressor=ridge_base, transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal")
-    )
+    np.log1p(y_full)
 
     for fold, (tr_idx, va_idx) in enumerate(kf10.split(train_full)):
+        print(f"Fold {fold + 1}/10...")
         tr = train_full.iloc[tr_idx].copy()
         va = train_full.iloc[va_idx].copy()
 
-        # 1. Fold-local Neighborhood Ranking (Trees)
+        # 1. Target Encoding Streams
+        # Ranking (Trees)
         va_tree = get_neighborhood_ranks(tr, va)
         tr_tree = get_neighborhood_ranks(tr, tr)
 
@@ -197,23 +198,17 @@ def main():
         neigh_counts = tr.groupby("Neighborhood")["SalePrice"].count()
 
         tr_linear = tr.copy()
-
         n_c_tr = tr["Neighborhood"].map(neigh_counts).fillna(0)
         sum_c_tr = tr["Neighborhood"].map(neigh_sums).fillna(0)
-
         denominator_tr = n_c_tr - 1 + m
         numerator_tr = sum_c_tr - tr["SalePrice"] + m * global_mean
-
         tr_linear["Neighborhood"] = np.where(denominator_tr > 0, numerator_tr / denominator_tr, global_mean)
 
         va_linear = va.copy()
-
         n_c_va = va["Neighborhood"].map(neigh_counts).fillna(0)
         sum_c_va = va["Neighborhood"].map(neigh_sums).fillna(0)
-
         denominator_va = n_c_va + m
         numerator_va = sum_c_va + m * global_mean
-
         va_linear["Neighborhood"] = np.where(denominator_va > 0, numerator_va / denominator_va, global_mean)
 
         # 2. Preprocessing Streams
@@ -252,18 +247,21 @@ def main():
         # The Ridge predictions are physically scaled dollars, so we must log1p them to blend!
         oof_ridge[va_idx] = np.log1p(np.clip(ridge_fold.predict(X_va_linear), 1, None))
 
+    return oof_xgb, oof_cat, oof_ridge
+
+
+def calculate_ensemble_weights(preds, y_true):
     print("\n--- Running SLSQP Meta-Learner ---")
-    preds = np.column_stack([oof_xgb, oof_cat, oof_ridge])
     errors = np.zeros_like(preds)
     for j in range(preds.shape[1]):
-        errors[:, j] = y_full_log - preds[:, j]
+        errors[:, j] = y_true - preds[:, j]
 
     cov_matrix = np.cov(errors, rowvar=False)
 
-    def objective_slsqp(w, preds, y_true, cov_matrix, lambda_reg=0.1):
-        ensemble_pred = np.dot(preds, w)
-        sse = np.sum((y_true - ensemble_pred) ** 2)
-        penalty = lambda_reg * np.dot(w.T, np.dot(cov_matrix, w))
+    def objective_slsqp(w, preds_inner, y_true_inner, cov_matrix_inner, lambda_reg=0.1):
+        ensemble_pred = np.dot(preds_inner, w)
+        sse = np.sum((y_true_inner - ensemble_pred) ** 2)
+        penalty = lambda_reg * np.dot(w.T, np.dot(cov_matrix_inner, w))
         return sse + penalty
 
     constraints = [{"type": "eq", "fun": lambda w: np.sum(w) - 1.0}]
@@ -273,7 +271,7 @@ def main():
     res = minimize(
         objective_slsqp,
         w0,
-        args=(preds, y_full_log, cov_matrix, 0.1),
+        args=(preds, y_true, cov_matrix, 0.1),
         method="SLSQP",
         bounds=bounds,
         constraints=constraints,
@@ -285,7 +283,12 @@ def main():
     for i, name in enumerate(model_names):
         print(f"  {name}: {best_weights[i]:.4f}")
 
+    return best_weights
+
+
+def calculate_conformal_bounds(train_90, calib_10, best_weights, xgb_base, cat_base, ridge_model):
     print("\n--- Calculating Conformal Bounds (90/10 Split) ---")
+    m = 20
     # 1. 90% Fold-local Neighborhood Ranking
     calib_tree = get_neighborhood_ranks(train_90, calib_10)
     train_90_tree = get_neighborhood_ranks(train_90, train_90)
@@ -320,6 +323,7 @@ def main():
     X_tr90_tree = tree_tf_90.fit_transform(train_90_tree.drop(columns=["Id", "SalePrice"]))
     X_ca_tree = tree_tf_90.transform(calib_tree.drop(columns=["Id", "SalePrice"]))
 
+    cat_features = X_tr90_tree.select_dtypes(include=["object", "str"]).columns.tolist()
     for col in cat_features:
         X_tr90_tree[col] = X_tr90_tree[col].fillna("Missing").astype(str)
         X_ca_tree[col] = X_ca_tree[col].fillna("Missing").astype(str)
@@ -351,7 +355,12 @@ def main():
     residuals = compute_non_conformity_scores(y_calib_log, calib_ensemble_log)
     q = compute_empirical_quantile(residuals, alpha=0.05)
 
+    return q
+
+
+def train_final_models_and_predict(train_full, test, best_weights, q, xgb_base, cat_base, ridge_model):
     print("\n--- Training 100% Final Models & Predicting Test ---")
+    m = 20
     # 1. 100% Fold-local Neighborhood Ranking (Trees)
     test_tree = get_neighborhood_ranks(train_full, test)
     train_full_tree = get_neighborhood_ranks(train_full, train_full)
@@ -386,6 +395,7 @@ def main():
     X_tr100_tree = tree_tf_100.fit_transform(train_full_tree.drop(columns=["Id", "SalePrice"]))
     X_te_tree = tree_tf_100.transform(test_tree.drop(columns=["Id"]))
 
+    cat_features = X_tr100_tree.select_dtypes(include=["object", "str"]).columns.tolist()
     for col in cat_features:
         X_tr100_tree[col] = X_tr100_tree[col].fillna("Missing").astype(str)
         X_te_tree[col] = X_te_tree[col].fillna("Missing").astype(str)
@@ -393,6 +403,9 @@ def main():
     linear_tf_100 = AmesDataTransformer(vif_prune=True)
     X_tr100_linear = linear_tf_100.fit_transform(train_full_linear.drop(columns=["Id", "SalePrice"]))
     X_te_linear = linear_tf_100.transform(test_linear.drop(columns=["Id"]))
+
+    y_full = train_full["SalePrice"].values
+    y_full_log = np.log1p(y_full)
 
     # 3. Fit 100%
     xgb_full = clone(xgb_base)
@@ -413,18 +426,51 @@ def main():
         test_ensemble_log, q, min_physical_price=42000.0, max_physical_price=525000.0
     )
 
-    # 4. Save
+    return y_pred_point, lower_bound, upper_bound
+
+
+def save_submissions(test_ids, y_pred_point, lower_bound, upper_bound):
     os.makedirs("./submissions", exist_ok=True)
 
-    sub = pd.DataFrame({"Id": test["Id"], "SalePrice": y_pred_point})
+    sub = pd.DataFrame({"Id": test_ids, "SalePrice": y_pred_point})
     sub.to_csv("submissions/submission_bifurcated.csv", index=False)
 
     sub_int = pd.DataFrame(
-        {"Id": test["Id"], "SalePrice": y_pred_point, "SalePrice_Lower": lower_bound, "SalePrice_Upper": upper_bound}
+        {"Id": test_ids, "SalePrice": y_pred_point, "SalePrice_Lower": lower_bound, "SalePrice_Upper": upper_bound}
     )
     sub_int.to_csv("submissions/submission_with_intervals_bifurcated.csv", index=False)
 
     print("\n✅ Bifurcated Pipeline Complete! Submissions saved.")
+
+
+def main():
+    train_full, train_90, calib_10, test = load_and_split_data()
+    best_xgb_params, best_cat_params = tune_models(train_full)
+
+    y_full = train_full["SalePrice"].values
+    y_full_log = np.log1p(y_full)
+
+    xgb_base = xgb.XGBRegressor(**best_xgb_params)
+    cat_base = CatBoostRegressor(**best_cat_params)
+
+    alphas_ridge = np.logspace(-3, 3, 50)
+    ridge_base = make_pipeline(RobustScaler(), RidgeCV(alphas=alphas_ridge, cv=5))
+    ridge_model = TransformedTargetRegressor(
+        regressor=ridge_base, transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal")
+    )
+
+    oof_xgb, oof_cat, oof_ridge = generate_oof_predictions(train_full, xgb_base, cat_base, ridge_model)
+
+    preds = np.column_stack([oof_xgb, oof_cat, oof_ridge])
+    best_weights = calculate_ensemble_weights(preds, y_full_log)
+
+    q = calculate_conformal_bounds(train_90, calib_10, best_weights, xgb_base, cat_base, ridge_model)
+
+    y_pred_point, lower_bound, upper_bound = train_final_models_and_predict(
+        train_full, test, best_weights, q, xgb_base, cat_base, ridge_model
+    )
+
+    save_submissions(test["Id"], y_pred_point, lower_bound, upper_bound)
 
 
 if __name__ == "__main__":

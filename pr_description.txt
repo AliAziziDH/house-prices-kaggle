@@ -1,0 +1,12 @@
+Title: 🧹 Refactor monolithic main function in bifurcated_pipeline.py
+
+🎯 **What:** The `main()` function in `src/bifurcated_pipeline.py` was overly long (~300 lines) and handled multiple distinct logical steps (data loading, Optuna tuning, OOF prediction generation, SLSQP weighting, conformal bounds calculation, final training, and submission saving). It has been refactored by extracting these steps into distinct, logically-named helper functions.
+
+💡 **Why:** By breaking down the monolithic `main()` function, the script is much easier to read, navigate, and test. It separates concerns, so modifying the tuning logic or the prediction logic no longer requires scrolling through hundreds of lines of unrelated code. This greatly improves the maintainability of the codebase.
+
+✅ **Verification:**
+- Formatted and linted the refactored code using `ruff` and confirmed all checks pass.
+- Added basic unit tests for some of the extracted logic (e.g. `calculate_ensemble_weights` and `save_submissions`) to verify proper state mapping.
+- Ran the full `pytest` suite locally, and ensured all tests pass.
+
+✨ **Result:** A clean, modular `bifurcated_pipeline.py` script where `main()` cleanly orchestrates the execution flow via well-named function calls, with zero changes to the underlying mathematical behavior or outputs.
